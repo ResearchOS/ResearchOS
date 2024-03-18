@@ -47,7 +47,9 @@ class Logsheet(PipelineObject):
         
         Args:
             self
-            path (string) : logsheet path as a string
+            path (string): logsheet path as a string
+            action (Action): the actions/commands associated with the logsheet path QUESTION logsheet or logsheet path
+            default (Any): IDK
         
         Returns:
             None
@@ -69,7 +71,14 @@ class Logsheet(PipelineObject):
             raise ValueError("Specified file is not a CSV!")
         
     def load_path(self, action: Action) -> None:
-        """Load the logsheet path."""
+        """Load the logsheet path.
+        
+        Args:
+            self
+            action (Action): actions/commands associated with the path
+            
+        Returns:
+            None QUESTION below it does return something?"""
         return ResearchObjectHandler.get_user_computer_path(self, "path", action)
         
     ### Logsheet headers
@@ -83,7 +92,9 @@ class Logsheet(PipelineObject):
         
         Args: 
             self
-            headers (list) : headers in the logsheet file as a list of tuples each with 3 elements
+            headers (list): headers in the logsheet file as a list of tuples each with 3 elements
+            action (Action): the actions/commands associated with the logsheet headers
+            default (Any): IDK
         
         Returns:
             None
@@ -127,12 +138,11 @@ class Logsheet(PipelineObject):
             raise ValueError(f"The headers {missing} do not match between logsheet and code!")
             
     def to_json_headers(self, headers: list, action: Action) -> str:
-        """Convert the headers to a JSON string.
-        Also sets the VR's name and level.
+        """Convert the headers to a JSON string and sets the VR's name and level.
         
         Args:
             self
-            headers (list) : headers in the logsheet file as a list of tuples
+            headers (list): headers in the logsheet file as a list of tuples
             
         Returns:
             ''headers'' as a JSON string using ''json.dumps''"""
@@ -152,10 +162,10 @@ class Logsheet(PipelineObject):
     def from_json_headers(self, json_var: str, action: Action) -> list:
         """Convert the JSON string to a list of headers.
         
-        
         Args:
             self
-            json_var (string) : JSON string returned by ''to_json_headers''
+            json_var (string): JSON string returned by ''to_json_headers''
+            action (Action): the actions/commands associated with the JSON string of headers
             
         Returns:
             formatted list of headers"""
@@ -179,13 +189,15 @@ class Logsheet(PipelineObject):
         
         Args:
             self
-            num_header_rows (int) : number of header rows as an integer
+            num_header_rows (int): number of header rows as an integer
+            action (Action): actions/commands associated with headers? IDK
+            default (Any): IDK
             
         Returns:
             None
             
         Raises:
-            ValueError: invalid ''num_header_rows'' format"""
+            ValueError: invalid ''num_header_rows'' format, must be numeric, positive, and an integer"""
         if num_header_rows == default:
             return
         if not isinstance(num_header_rows, (int, float)):
@@ -200,12 +212,12 @@ class Logsheet(PipelineObject):
     def validate_class_column_names(self, class_column_names: dict, action: Action, default: Any) -> None:
         """Validate the class column names. Must be a dict where the keys are the column names in the logsheet and the values are the DataObject subclasses.
         
-        Must be a dict where the keys are the column names in the logsheet and the values are the DataObject subclasses.
-        
         Args:
             self
             class_column_names (dict) : dictionary where keys are logsheet column names & values are ''DataObject'' subcclasses
-            
+            action (Action): actions/commands associated with class column names? IDK
+            default (Any): IDK
+
         Returns:
             None
             
@@ -243,13 +255,12 @@ class Logsheet(PipelineObject):
     
     def to_json_class_column_names(self, var: dict, action: Action) -> str:
         """Convert the dict from a dict where keys are column names and values are DataObject subclasses to a JSON string where values are class prefixes.
-        
-        Convert the dict from a dict where keys are column names and values are DataObject subclasses to a JSON string where values are class prefixes.
-        UNCLEAR QUESTION does it return a JSON string or a dict? is the JSON string just the format of the new dict values?
+        QUESTION does it return a JSON string or a dict? is the JSON string just the format of the new dict values?
         
         Args:
             self
-            var (dict) : same dict as ''class_column_name'' in ''validate_class_column_names''
+            var (dict): same dict as ''class_column_name'' in ''validate_class_column_names''
+            action (Action): actions/commands associated with the JSON class column names
         
         Returns:
             new dict where keys are are logsheet column names and values are a JSON sring of class prefixes IDK"""        
@@ -260,7 +271,14 @@ class Logsheet(PipelineObject):
 
     #################### Start class-specific methods ####################
     def read_and_clean_logsheet(self, nrows: int = None) -> list:
-        """Read the logsheet (CSV only) and clean it."""
+        """Read the logsheet (CSV only) and clean it.
+        
+        Args:
+            self
+            nrows (int); number of rows in the given logsheet QUESTION what does int = None mean
+            
+        Returns:    
+            cleaned logsheet as a list"""
         logsheet = []
         if platform.system() == "Windows":
             first_elem_prefix = "ï»¿"
@@ -300,8 +318,7 @@ class Logsheet(PipelineObject):
             None
         
         Raises:
-            ValueError: more header rows than logsheet rows or incorrect schema format
-            QUESTION except ValueError?"""
+            ValueError: more header rows than logsheet rows or incorrect schema format"""
         ds = Dataset(id = self.get_dataset_id())
         action = Action(name = "read logsheet")
         self.validate_class_column_names(self.class_column_names, action, None)
@@ -456,7 +473,18 @@ class Logsheet(PipelineObject):
         action.execute() # Commit the action.
 
     def clean_value(self, type_class: type, raw_value: Any) -> Any:
-        """Convert to proper type and clean the value of the logsheet cell."""
+        """Convert to proper type and clean the value of the logsheet cell.
+        
+        Args:
+            self
+            type_class (type): IDK
+            raw_value (Any): the raw value you want to clean IDK
+            
+        Returns:
+            the cleaned logsheet cell value as its proper type
+        
+        Raises:
+            ValueError: QUESTION what is an except valueerror"""
         try:
             value = type_class(raw_value)
         except ValueError:

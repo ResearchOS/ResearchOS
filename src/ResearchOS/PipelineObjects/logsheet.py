@@ -241,7 +241,7 @@ class Logsheet(PipelineObject):
                     break
         return class_column_names
     
-    def to_json_class_column_names(self, var: dict, action: Action) -> dict:
+    def to_json_class_column_names(self, var: dict, action: Action) -> str:
         """Convert the dict from a dict where keys are column names and values are DataObject subclasses to a JSON string where values are class prefixes.
         
         Convert the dict from a dict where keys are column names and values are DataObject subclasses to a JSON string where values are class prefixes.

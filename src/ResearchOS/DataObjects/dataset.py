@@ -38,16 +38,20 @@ class Dataset(DataObject):
     ### Schema Methods
         
     def validate_schema(self, schema: list, action: Action, default: Any) -> None:
-        """Validate that the data schema follows the proper format.
-        Must be a dict of dicts, where all keys are Python types matching a DataObject subclass, and the lowest levels are empty.
+        """Validate that the data schema follows the proper format and is in the MultiDiGraph.
         
         Args:
             self
             schema (list) : dict of dicts, all keys are Python types matching a DataObject subclass, and the lowest levels are empty
+            action (Action) : IDK, its not used in this function
+            default (Any) : IDK
+        
         Returns:
             None
+        
         Raises:
             ValueError: Incorrect schema type"""
+        
         from ResearchOS.research_object import ResearchObject
         if schema == default:
             return
@@ -80,10 +84,12 @@ class Dataset(DataObject):
 
     def save_schema(self, schema: list, action: Action) -> None:
         """Save the schema to the database. One cohesive action.
+
         Args:
             self
             schema (list) : dict of dicts, all keys are Python types matching a DataObject subclass, and the lowest levels are empty
-            action (Action) : a set of sequal queries that perform multiple action with one Action object call
+            action (Action) : actions associated with given schema, gets updated to include actions associated with saving the schema IDK
+        
         Returns:
             None"""
         # 1. Convert the list of types to a list of str.
@@ -103,7 +109,15 @@ class Dataset(DataObject):
         action.add_sql_query(self.id, "data_address_schemas_insert", params, group_name = "robj_complex_attr_insert")
 
     def load_schema(self, action: Action) -> list:
-        """Load the schema from the database and convert it via json."""
+        """Load the schema from the database and convert it via json.
+
+        Args:
+            self
+            action (Action) : actions associated with the given schema
+        
+        Returns:
+            the given schema as a list of types IDK might be a list of something else
+        """
 
         # 1. Get the dataset ID
         id = self.id
@@ -132,8 +146,12 @@ class Dataset(DataObject):
         Args:
             self
             path (string): your dataset path
+            action (Action): actions/commands associated with the dataset path
+            default (Any): IDK
+        
         Returns:
             None
+        
         Raises:
             ValueError: given path does not exist"""        
         if path == default:
@@ -142,7 +160,14 @@ class Dataset(DataObject):
             raise ValueError("Specified path is not a path or does not currently exist!")
         
     def load_dataset_path(self, action: Action) -> str:
-        """Load the dataset path from the database in a computer-specific way."""
+        """Load the dataset path from the database in a computer-specific way.
+        
+        Args:
+            self
+            action (Action) : 
+            
+        Returns:
+            the dataset path (and associated Actions? IDK) as a string"""
         return ResearchObjectHandler.get_user_computer_path(self, "dataset_path", action)
         
     ### Address Methods
@@ -152,9 +177,13 @@ class Dataset(DataObject):
         
         Args:
             self
-            addresses (list) : list of addresses IDK
+            addresses (list): edge list of IDs from logsheet (a list of list of strings)
+            action (Action): actions/commands associated with the addresses
+            default (Any): IDK
+        
         Returns:
             None
+        
         Raises:
             ValueError: invalid address provided"""
         if addresses == default:
@@ -192,12 +221,14 @@ class Dataset(DataObject):
 
     def save_addresses(self, addresses: list, action: Action) -> list:
         """Save the addresses to the data_addresses table in the database.
+        
         Args:
             self
-            addresses (list) : list of addresses IDK
-            action (Action) : IDK
+            addresses (list): edge list of IDs from logsheet (a list of list of strings)
+            action (Action): the actions/commands associated with the addresses
+        
         Returns:
-            None"""        
+            a list of addresses QUESTION i don't see it returning anything, does it actually return or just save the list in the database?"""        
         # 1. Get the schema_id for the current dataset_id that has not been overwritten by an Action.       
         dataset_id = self.id
         schema_id = self.get_current_schema_id(dataset_id)                
@@ -207,7 +238,14 @@ class Dataset(DataObject):
         # self.__dict__["address_graph"] = self.addresses_to_graph(addresses, action)        
 
     def load_addresses(self, action: Action) -> list:
-        """Load the addresses from the database."""
+        """Load the addresses from the database.
+        
+        Args:
+            self
+            action (Action): actions/commands associated with the addresses in the database
+            
+        Returns:
+            all? some? if some, where is it specified? IDK addresses in the database as a list """
         pool = SQLiteConnectionPool()        
         schema_id = self.get_current_schema_id(self.id)
         conn = pool.get_connection()
@@ -225,9 +263,10 @@ class Dataset(DataObject):
 
     def get_addresses_graph(self) -> nx.MultiDiGraph:
         """Convert the addresses edge list to a MultiDiGraph.
+        
         Args:
             self
-            addresses (list) : list of addresses
+        
         Returns:
             nx.MultiDiGraph of addresses"""
         # action = Action("get_addresses_graph")

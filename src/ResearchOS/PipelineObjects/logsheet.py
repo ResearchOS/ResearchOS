@@ -48,8 +48,8 @@ class Logsheet(PipelineObject):
         Args:
             self
             path (string): logsheet path as a string
-            action (Action): the actions/commands associated with the logsheet path QUESTION logsheet or logsheet path
-            default (Any): IDK
+            action (Action): the actions/commands associated with the logsheet path
+            default (Any): default path attribute stored in ''all_default_attributes''
         
         Returns:
             None
@@ -70,7 +70,7 @@ class Logsheet(PipelineObject):
         if not path.endswith(("csv", "xlsx", "xls")):
             raise ValueError("Specified file is not a CSV!")
         
-    def load_path(self, action: Action) -> None:
+    def load_path(self, action: Action) -> str:
         """Load the logsheet path.
         
         Args:
@@ -78,7 +78,7 @@ class Logsheet(PipelineObject):
             action (Action): actions/commands associated with the path
             
         Returns:
-            None QUESTION below it does return something?"""
+            logsheet path as a string"""
         return ResearchObjectHandler.get_user_computer_path(self, "path", action)
         
     ### Logsheet headers
@@ -94,7 +94,7 @@ class Logsheet(PipelineObject):
             self
             headers (list): headers in the logsheet file as a list of tuples each with 3 elements
             action (Action): the actions/commands associated with the logsheet headers
-            default (Any): IDK
+            default (Any): default headers attribute stored in ''all_default_attributes''
         
         Returns:
             None
@@ -190,8 +190,8 @@ class Logsheet(PipelineObject):
         Args:
             self
             num_header_rows (int): number of header rows as an integer
-            action (Action): actions/commands associated with headers? IDK
-            default (Any): IDK
+            action (Action): actions associated with header rows
+            default (Any): default headers attribute stored in ''all_default_attributes''
             
         Returns:
             None
@@ -215,8 +215,8 @@ class Logsheet(PipelineObject):
         Args:
             self
             class_column_names (dict) : dictionary where keys are logsheet column names & values are ''DataObject'' subcclasses
-            action (Action): actions/commands associated with class column names? IDK
-            default (Any): IDK
+            action (Action): actions/commands associated with class column names
+            default (Any): default class_column_names attribute stored in ''all_default_attributes''
 
         Returns:
             None
@@ -254,16 +254,15 @@ class Logsheet(PipelineObject):
         return class_column_names
     
     def to_json_class_column_names(self, var: dict, action: Action) -> str:
-        """Convert the dict from a dict where keys are column names and values are DataObject subclasses to a JSON string where values are class prefixes.
-        QUESTION does it return a JSON string or a dict? is the JSON string just the format of the new dict values?
-        
+        """Convert from a dict where keys are column names and values are DataObject subclasses to a JSON string where values are class prefixes.
+        dict of strings gets converted to long ass string
         Args:
             self
             var (dict): same dict as ''class_column_name'' in ''validate_class_column_names''
             action (Action): actions/commands associated with the JSON class column names
         
         Returns:
-            new dict where keys are are logsheet column names and values are a JSON sring of class prefixes IDK"""        
+            long string of class prefixes"""        
         prefix_var = {}
         for key in var:
             prefix_var[key] = var[key].prefix
@@ -275,7 +274,7 @@ class Logsheet(PipelineObject):
         
         Args:
             self
-            nrows (int); number of rows in the given logsheet QUESTION what does int = None mean
+            nrows (int): number of rows in the given logsheet with the default value of None
             
         Returns:    
             cleaned logsheet as a list"""
@@ -481,10 +480,7 @@ class Logsheet(PipelineObject):
             raw_value (Any): the raw value you want to clean IDK
             
         Returns:
-            the cleaned logsheet cell value as its proper type
-        
-        Raises:
-            ValueError: QUESTION what is an except valueerror"""
+            the cleaned logsheet cell value as its proper type"""
         try:
             value = type_class(raw_value)
         except ValueError:

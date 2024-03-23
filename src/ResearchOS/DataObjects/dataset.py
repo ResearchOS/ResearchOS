@@ -37,14 +37,14 @@ class Dataset(DataObject):
     
     ### Schema Methods
         
-    def validate_schema(self, schema: list, action: Action, default: Any) -> None:
+    def validate_schema(self, schema: list, action: Action, default: list) -> None:
         """Validate that the data schema follows the proper format and is in the MultiDiGraph.
         
         Args:
             self
-            schema (list) : dict of dicts, all keys are Python types matching a DataObject subclass, and the lowest levels are empty
-            action (Action) : IDK, its not used in this function
-            default (Any) : IDK
+            schema (list): dict of dicts, all keys are Python types matching a DataObject subclass, and the lowest levels are empty
+            action (Action): actions/commands associated with the given schema
+            default (list): default schema attribute stored in ''all_default_attributes''
         
         Returns:
             None
@@ -224,11 +224,11 @@ class Dataset(DataObject):
         
         Args:
             self
-            addresses (list): edge list of IDs from logsheet (a list of list of strings)
+            addresses (list): edge list of IDs from logsheet (a list of a list of strings)
             action (Action): the actions/commands associated with the addresses
         
         Returns:
-            a list of addresses QUESTION i don't see it returning anything, does it actually return or just save the list in the database?"""        
+            None"""        
         # 1. Get the schema_id for the current dataset_id that has not been overwritten by an Action.       
         dataset_id = self.id
         schema_id = self.get_current_schema_id(dataset_id)                

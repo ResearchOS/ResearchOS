@@ -45,6 +45,15 @@ class Subset(PipelineObject):
                 }
             ]
         }
+        
+        Args:
+            self
+            conditions (dictionary): a dict where the keys are IDK and the values are the different conditions IDK
+            action (Action): the actions associated with the conditions
+            default (Any): default conditions attribute stored in ''all_default_attributes''
+            
+        Returns:
+            None
         """
         if conditions == default:
             return
@@ -84,7 +93,13 @@ class Subset(PipelineObject):
             a = [self.validate_conditions(cond, action, default = default) for cond in value] # Assigned to a just to make interpreter happy.
             
     def get_subset(self) -> nx.MultiDiGraph:
-        """Resolve the conditions to the actual subset of data."""
+        """Resolve the conditions to the actual subset of data.
+        
+        Args:
+            self
+            
+        Returns:
+            A MultiDiGraph of the nodes in the subgraph IDK"""
         # 1. Get the dataset.
         dataset_id = self.get_dataset_id()
         ds = Dataset(id = dataset_id)
@@ -104,7 +119,17 @@ class Subset(PipelineObject):
         return G.subgraph(nodes_for_subgraph) # Maintains the relationships between all of the nodes in the subgraph.
 
     def meets_conditions(self, node_id: str, conditions: dict, G: nx.MultiDiGraph, subclasses: list) -> bool:
-        """Check if the node_id meets the conditions.""" 
+        """Check if the node_id meets the conditions.
+        
+        Args:
+            self
+            node_id (string): the node ID you want to check the conditions of
+            conditions (dictionary): a dict where the keys are IDK and the values are the different conditions IDK
+            G (MultiDiGraph): a multi dimentional graph of the nodes surrounding the given conditions IDK
+            subclasses (list): subclasses to IDK QUESTION how are you using subclasses
+            
+        Returns:
+            boolean indicating whether or not the node ID meets the given conditions""" 
         if isinstance(conditions, dict):
             if "and" in conditions:
                 for cond in conditions["and"]:

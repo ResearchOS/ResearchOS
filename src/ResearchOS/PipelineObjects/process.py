@@ -75,7 +75,19 @@ class Process(PipelineObject):
     ## mfunc_name (MATLAB function name) methods
 
     def validate_mfunc_name(self, mfunc_name: str, action: Action, default: Any) -> None:
-        """Validate that the MATLAB function name is correct."""
+        """Validate that the MATLAB function name is correct.
+        
+        Args:
+            self
+            mfunc_name (string):
+            action (Action):
+            default (Any):
+            
+        Returns:
+            None
+            
+        Raises:
+            ValueError: invalid function name, must be a string of an existing MATLAB function"""
         if mfunc_name == default:
             return
         self.validate_mfolder(self.mfolder, action, None)

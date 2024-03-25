@@ -2,12 +2,37 @@ site_name: ResearchOS
 site_author: Mitchell Tillman
 repo_name: ResearchOS
 repo_url: https://github.com/ResearchOS/ResearchOS
+site_url: https://researchos.github.io/ResearchOS/
 theme:
   name: material
   features:
     - navigation.path
+    - navigation.tabs
+    - navigation.tabs.sticky
+    - navigation.expand
+    - toc.follow
+    - navigation.top
 
 plugins:
   - search
+  - awesome-pages
   - mkdocstrings:
       default_handler: python
+      handlers:
+        python:
+          rendering:
+            show_source: true
+          options:
+            filters:
+              - "!^__.*__$"
+              - "!^_"
+              - "!^validate"
+              - "!^to_json"
+              - "!^from_json"
+              - "!^load_"
+              - "!^save_"
+
+markdown_extensions:
+  - pymdownx.highlight:
+      use_pygments: true
+  - pymdownx.superfences

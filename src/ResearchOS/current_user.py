@@ -6,7 +6,7 @@ if TYPE_CHECKING:
 
 from ResearchOS.idcreator import IDCreator
 from ResearchOS.get_computer_id import COMPUTER_ID
-from ResearchOS.sql.sql_joiner_most_recent import sql_joiner_most_recent
+# from ResearchOS.sql.sql_joiner_most_recent import sql_joiner_most_recent
 
 default_current_user = "default_user"
 

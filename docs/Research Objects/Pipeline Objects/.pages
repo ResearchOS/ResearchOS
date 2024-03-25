@@ -1,0 +1,12 @@
+nav:
+    - pipeline_object.md
+    - Runnables:
+        - runnables.md
+        - process.md
+        - plot.md
+        - stats.md
+    - project.md
+    - analysis.md
+    - logsheet.md    
+    - subset.md
+    

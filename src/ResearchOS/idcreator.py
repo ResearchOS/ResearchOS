@@ -44,6 +44,7 @@ class IDCreator():
  
             id = cls.prefix + abstract_new + "_" + instance_new
             cursor = conn.cursor()
+            cursor = conn.cursor()
             sql = f'SELECT object_id FROM {table_name} WHERE object_id = "{id}"'
             cursor.execute(sql)
             rows = cursor.fetchall()
@@ -92,6 +93,7 @@ class IDCreator():
         abstract_pattern = "^[a-zA-Z]{2}[a-fA-F0-9]{6}$"
         subclasses = ResearchObjectHandler._get_subclasses(ResearchObject)
         # Check for a valid prefix.
+        # self.pool.return_connection(self.conn)
         # self.pool.return_connection(self.conn)
         if not any(id.startswith(cls.prefix) for cls in subclasses if hasattr(cls, "prefix")):
             return False

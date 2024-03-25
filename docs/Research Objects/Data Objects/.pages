@@ -1,0 +1,5 @@
+nav:
+    - Data Objects: data_object.md
+    - Dataset: dataset.md
+    - Defining Data Objects: defining_data_objects.md
+    - ...

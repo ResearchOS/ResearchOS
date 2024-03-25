@@ -28,9 +28,6 @@ def get_latest_action(user_id: str = None) -> Action:
     action_ids = get_action_ids_within_time_range(action = Action(conn = conn), timestamp1 = current_user_timestamps[0][0], timestamp2 = current_user_timestamps[-1][1])
     return Action(id = action_ids[-1]) # Return the latest one.
     
-    # ###############################################################################################################################
-    # #################################################### end of abstract methods ##################################################
-    # ###############################################################################################################################
 
 def get_next_action(action: Action) -> Action:
     """Get the next action after this action."""

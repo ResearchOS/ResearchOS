@@ -2,9 +2,8 @@ from typing import Any
 import json, csv, platform, os
 
 import networkx as nx
-# from memory_profiler import profile
+import numpy as np
 
-# import pandas as pd
 from ResearchOS.DataObjects.data_object import DataObject
 from ResearchOS.variable import Variable
 from ResearchOS.DataObjects.dataset import Dataset
@@ -14,6 +13,7 @@ from ResearchOS.action import Action
 from ResearchOS.research_object_handler import ResearchObjectHandler
 from ResearchOS.idcreator import IDCreator
 from ResearchOS.default_attrs import DefaultAttrs
+from ResearchOS.var_converter import convert_var
 
 # Defaults should be of the same type as the expected values.
 all_default_attrs = {}
@@ -33,12 +33,13 @@ class Logsheet(PipelineObject):
 
     def __init__(self, path: str = all_default_attrs["path"], headers: list = all_default_attrs["headers"],
                 num_header_rows: int = all_default_attrs["num_header_rows"], class_column_names: dict = all_default_attrs["class_column_names"], **kwargs):
+        if self._initialized:
+            return
         self.path = path
         self.headers = headers
         self.num_header_rows = num_header_rows
         self.class_column_names = class_column_names
         super().__init__(**kwargs)
-        self._initialized = True
 
     ### Logsheet path
         
@@ -70,7 +71,7 @@ class Logsheet(PipelineObject):
         if not path.endswith(("csv", "xlsx", "xls")):
             raise ValueError("Specified file is not a CSV!")
         
-    def load_path(self, action: Action) -> str:
+    def load_path(self, action: Action) -> None:
         """Load the logsheet path.
         
         Args:
@@ -129,7 +130,7 @@ class Logsheet(PipelineObject):
             if isinstance(header[3], str) and not (header[3].startswith(Variable.prefix) and ResearchObjectHandler.object_exists(header[3], action)):
                 raise ValueError("Fourth element of each header tuple (if provided as a str) must be a valid pre-existing variable ID!")
             
-        logsheet = self.read_and_clean_logsheet(nrows = 1)
+        logsheet = self._read_and_clean_logsheet(nrows = 1)
         headers_in_logsheet = logsheet[0]
         header_names = [header[0] for header in headers]
         missing = [header for header in headers_in_logsheet if header not in header_names]
@@ -138,11 +139,12 @@ class Logsheet(PipelineObject):
             raise ValueError(f"The headers {missing} do not match between logsheet and code!")
             
     def to_json_headers(self, headers: list, action: Action) -> str:
-        """Convert the headers to a JSON string and sets the VR's name and level.
+        """Convert the headers to a JSON string.
+        Also sets the VR's name and level.
         
         Args:
             self
-            headers (list): headers in the logsheet file as a list of tuples
+            headers (list) : headers in the logsheet file as a list of tuples
             
         Returns:
             ''headers'' as a JSON string using ''json.dumps''"""
@@ -154,8 +156,8 @@ class Logsheet(PipelineObject):
             else:
                 vr = Variable(id = header[3], action = action)
             default_attrs = DefaultAttrs(vr).default_attrs
-            kwarg_dict = {"name": header[0], "level": header[2]}
-            vr._setattrs(default_attrs, kwarg_dict, action = action)
+            kwarg_dict = {"name": header[0]}
+            vr._setattrs(default_attrs, kwarg_dict, action, None)
             str_headers.append((header[0], str(header[1])[8:-2], header[2].prefix, vr.id))
         return json.dumps(str_headers)
 
@@ -236,7 +238,7 @@ class Logsheet(PipelineObject):
             if not issubclass(value, DataObject):
                 raise ValueError("Values of class column names must be Python types that subclass DataObject!")
             
-        headers = self.read_and_clean_logsheet(nrows = 1)[0]
+        headers = self._read_and_clean_logsheet(nrows = 1)[0]
         if not all([header in headers for header in class_column_names.keys()]):
             raise ValueError("The class column names must be in the logsheet headers!")
 
@@ -255,7 +257,7 @@ class Logsheet(PipelineObject):
     
     def to_json_class_column_names(self, var: dict, action: Action) -> str:
         """Convert from a dict where keys are column names and values are DataObject subclasses to a JSON string where values are class prefixes.
-        dict of strings gets converted to long ass string
+        
         Args:
             self
             var (dict): same dict as ''class_column_name'' in ''validate_class_column_names''
@@ -283,6 +285,8 @@ class Logsheet(PipelineObject):
             first_elem_prefix = "ï»¿"
         else:
             first_elem_prefix = '\ufeff'
+        if self.path.endswith(("xlsx", "xls")):
+            raise ValueError("CSV files only!")
         with open(self.path, "r") as f:
             reader = csv.reader(f, delimiter=',', quotechar='"')            
 
@@ -317,9 +321,9 @@ class Logsheet(PipelineObject):
             None
         
         Raises:
-            ValueError: more header rows than logsheet rows or incorrect schema format"""
-        ds = Dataset(id = self.get_dataset_id())
+            ValueError: more header rows than logsheet rows or incorrect schema format?"""
         action = Action(name = "read logsheet")
+        ds = Dataset(id = self._get_dataset_id(), action = action)
         self.validate_class_column_names(self.class_column_names, action, None)
         self.validate_headers(self.headers, action, None)
         self.validate_num_header_rows(self.num_header_rows, action, None)
@@ -329,7 +333,7 @@ class Logsheet(PipelineObject):
         if self.path.endswith(("xlsx", "xls")):
             full_logsheet = self.load_xlsx()
         else:
-            full_logsheet = self.read_and_clean_logsheet()
+            full_logsheet = self._read_and_clean_logsheet()
 
         if len(full_logsheet) < self.num_header_rows:
             raise ValueError("The number of header rows is greater than the number of rows in the logsheet!")
@@ -358,7 +362,6 @@ class Logsheet(PipelineObject):
                 vr = vr_id
             else:
                 vr = Variable(id = vr_id, action = action)
-            assert vr.level == header_levels[idx]
             vr_obj_list.append(vr)
             vr_list.append(vr.id)
             
@@ -385,11 +388,11 @@ class Logsheet(PipelineObject):
             for idx in cols_idx:
                 raw_value = row[idx]
                 type_class = header_types[idx]
-                value = self.clean_value(type_class, raw_value)
+                value = self._clean_value(type_class, raw_value)
                 dobj_names[-1].append(value)
         for row_num, row in enumerate(dobj_names):
             if not all([str(cell).isidentifier() for cell in row]):
-                raise ValueError(f"Row # (1-based): {row_num+self.num_header_rows+1} all data object names must be non-empty and valid variable names!")
+                raise ValueError(f"Row #{row_num+self.num_header_rows+1} (1-based): All data object names must be non-empty and valid variable names!")
         [row.insert(0, ds.id) for row in dobj_names] # Prepend the Dataset to the first column of each row.
         name_ids_dict = {} # The dict that maps the values (names) to the IDs. Separate dict for each class, each class is a top-level key of the dict.
         name_ids_dict[Dataset] = {ds.name: ds.id}
@@ -400,7 +403,7 @@ class Logsheet(PipelineObject):
             name_dobjs_dict[cls] = {}
 
         # Create the DataObject instances in the dict.        
-        all_dobjs_ordered = [] # The list of lists of DataObject instances, ordered by the order of the schema.
+        all_dobjs_ordered = [] # The list of lists of DataObject instances, ordered by the order of the schema.        
         id_creator = IDCreator(action.conn)
         for row_num, row in enumerate(dobj_names):
             row = row[1:]
@@ -408,9 +411,18 @@ class Logsheet(PipelineObject):
             for idx in range(len(row)):
                 cls = order[idx] # The class to create.
                 col_idx = cols_idx[idx] # The index of the column in the logsheet.
-                value = self.clean_value(header_types[col_idx], row[idx])
-                if value not in name_ids_dict[cls]:
-                    name_ids_dict[cls][value] = id_creator.create_ro_id(cls)
+                value = self._clean_value(header_types[col_idx], row[idx])
+                # NEED TO CHECK NOT ONLY IF THE VALUE MATCHES, BUT WHETHER THE ENTIRE LINEAGE MATCHES.
+                # For example, condition names can be reused between subjects (though not within the same subject) but a new ID should be created for each lineage.
+                row_to_now = [ds.id] + row[0:idx+1]
+                is_new = True
+                if row_num > 0:
+                    for lst in dobj_names[0:row_num]:
+                        if set(row_to_now).issubset(set(lst)):
+                            is_new = False
+                            break
+                if is_new:
+                    name_ids_dict[cls][value] = id_creator.create_ro_id(cls) + "_" + value
                     dobj = cls(id = name_ids_dict[cls][value], name = value, action = action) # Create the research object.
                     name_dobjs_dict[cls][value] = dobj
                     print("Creating DataObject, Row: ", row_num, "Column: ", cls.prefix, "Value: ", value, "ID: ", dobj.id)
@@ -421,6 +433,7 @@ class Logsheet(PipelineObject):
         # Validates that the logsheet is of valid format.
         # i.e. Doesn't have conflicting values for one level (empty/None is OK)
         attrs_cache_dict = {}
+        default_none_vals = {str: None, int: np.array(float('nan'))}
         for row_num, row in enumerate(logsheet):
             row_dobjs = all_dobjs_ordered[row_num][1:]
             row_attrs = [{} for _ in range(len(order))] # The list of dicts of attributes for each DataObject instance.
@@ -434,24 +447,23 @@ class Logsheet(PipelineObject):
                 level = header[2]
                 level_idx = order.index(level)
                 vr_id = header[3]                
-                value = self.clean_value(type_class, row[headers_in_logsheet.index(name)])
+                value = self._clean_value(type_class, row[headers_in_logsheet.index(name)])                                    
                 # Set up the cache dict for this data object.
                 if not row_dobjs[level_idx].id in attrs_cache_dict:
                     attrs_cache_dict[row_dobjs[level_idx].id] = {}
                 # Set up the cache dict for this data object for this attribute.
                 if name not in attrs_cache_dict[row_dobjs[level_idx].id]:
-                    attrs_cache_dict[row_dobjs[level_idx].id][name] = None
+                    attrs_cache_dict[row_dobjs[level_idx].id][name] = default_none_vals[type_class]
                 print("Row: ", row_num+self.num_header_rows+1, "Column: ", name, "Value: ", value)
                 prev_value = attrs_cache_dict[row_dobjs[level_idx].id][name]
-                # prev_value = getattr(row_dobjs[level_idx], name, None) # May not exist yet.
-                if prev_value is not None:                    
-                    if prev_value == value or value is None:
+                if prev_value is not default_none_vals[type_class] and (type(prev_value) == np.ndarray and not np.isnan(prev_value)):                    
+                    if prev_value == value or value == default_none_vals[type_class] or np.isnan(value):
                         continue
                     raise ValueError(f"Row # (1-based): {row_num+self.num_header_rows+1} Column: {name} has conflicting values!")
                 attrs_cache_dict[row_dobjs[level_idx].id][name] = value
                 row_attrs[level_idx][vr_id] = attrs_cache_dict[row_dobjs[level_idx].id][name]
             for idx, attrs in enumerate(row_attrs):
-                row_dobjs[idx]._setattrs({}, attrs, action = action)                           
+                row_dobjs[idx]._setattrs({}, attrs, action = action, pr_id = self.id)                           
 
         # Arrange the address ID's that were generated into an edge list.
         # Then assign that to the Dataset.
@@ -464,39 +476,27 @@ class Logsheet(PipelineObject):
                 if ids not in addresses:
                     addresses.append(ids)
         all_default_attrs = DefaultAttrs(ds)
-        ds._setattrs(all_default_attrs.default_attrs, {"addresses": addresses}, action = action)
+        ds._setattrs(all_default_attrs.default_attrs, {"addresses": addresses}, action = action, pr_id = self.id)
         # ds.addresses = addresses # Store addresses, also creates address_graph.
 
         action.exec = True
         action.commit = True
         action.execute() # Commit the action.
 
-    def clean_value(self, type_class: type, raw_value: Any) -> Any:
-        """Convert to proper type and clean the value of the logsheet cell.
-        
-        Args:
-            self
-            type_class (type): IDK
-            raw_value (Any): the raw value you want to clean IDK
-            
-        Returns:
-            the cleaned logsheet cell value as its proper type"""
+    def _clean_value(self, type_class: type, raw_value: Any) -> Any:
+        """Convert to proper type and clean the value of the logsheet cell."""
         try:
             value = type_class(raw_value)
         except ValueError:
             value = raw_value
         if isinstance(value, str):
             value = value.replace("'", "''") # Handle single quotes.
+            value = value.strip()
         if value == '': # Empty
             value = None
+        if type_class is int:
+            if value is None:
+                value = np.array(float('nan'))
+            else:
+                value = np.array(value)
         return value
-
-
-
-if __name__=="__main__":
-    lg = Logsheet(id = "LG000000")
-    lg = Logsheet(id = "LG000000_001")
-    print(lg.num_header_rows)
-    lg2 = lg.copy_to_new_instance()
-    lg.num_header_rows = -1
-    print(lg.num_header_rows)

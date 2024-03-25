@@ -63,28 +63,4 @@ class SQLiteConnectionPool:
             connection = self.pool.get(block=False)
             connection.close()
 
-    # def commit_and_return_all(self):
-    #     with self._lock:
-    #         # Commit transactions for idle connections in the pool
-    #         all_connections = []
-    #         while not self.pool.empty():
-    #             try:
-    #                 conn = self.pool.get_nowait()
-    #                 conn.commit()
-    #                 all_connections.append(conn)
-    #             except Empty:
-    #                 break
-
-    #         # Commit transactions for checked-out connections
-    #         for conn in self.checked_out_connections:
-    #             conn.commit()
-
-    #         # Return all connections back to the pool
-    #         for conn in self.checked_out_connections:
-    #             self.return_connection(conn)
-
-    #         # Return idle connections back to the pool
-    #         # for conn in idle_connections:
-    #         #     self.pool.put(conn)
-
             

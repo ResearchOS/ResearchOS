@@ -19,6 +19,8 @@ For MATLAB R2021b:
 python -m pip install matlabengine==9.11.19
 For MATLAB R2023a:
 python -m pip install matlabengine==9.14.6
+For MATLAB R2023b:
+python -m pip install matlabengine==23.2.3
 
 # 4. In MATLAB, run:
 pyenv(Version="3.9")

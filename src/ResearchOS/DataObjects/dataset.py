@@ -12,9 +12,10 @@ from ResearchOS.idcreator import IDCreator
 from ResearchOS.sqlite_pool import SQLiteConnectionPool
 
 all_default_attrs = {}
-all_default_attrs["schema"] = [] # Dict of empty dicts, where each key is the class and the value is a dict with subclass type(s).
+all_default_attrs["schema"] = [] # Edge list of DataObjects
 all_default_attrs["dataset_path"] = None # str
 all_default_attrs["addresses"] = [] # Dict of empty dicts, where each key is the ID of the object and the value is a dict with the subclasses' ID's.
+all_default_attrs["file_schema"] = [] # str
 
 computer_specific_attr_names = ["dataset_path"]
 
@@ -28,17 +29,23 @@ class Dataset(DataObject):
 
     def __init__(self, schema: list = all_default_attrs["schema"], 
                  dataset_path: str = all_default_attrs["dataset_path"], 
-                 addresses: list = all_default_attrs["addresses"], **kwargs):                 
+                 addresses: list = all_default_attrs["addresses"], 
+                 file_schema: list = all_default_attrs["file_schema"],
+                 **kwargs):                 
         """Create a new dataset."""
+        if self._initialized:
+            return
         self.schema = schema
         self.dataset_path = dataset_path
         self.addresses = addresses
+        self.file_schema = file_schema
         super().__init__(**kwargs)
     
     ### Schema Methods
         
     def validate_schema(self, schema: list, action: Action, default: list) -> None:
         """Validate that the data schema follows the proper format and is in the MultiDiGraph.
+        Must be a dict of dicts, where all keys are Python types matching a DataObject subclass, and the lowest levels are empty.
         
         Args:
             self
@@ -84,14 +91,14 @@ class Dataset(DataObject):
 
     def save_schema(self, schema: list, action: Action) -> None:
         """Save the schema to the database. One cohesive action.
-
+        
         Args:
             self
-            schema (list) : dict of dicts, all keys are Python types matching a DataObject subclass, and the lowest levels are empty
-            action (Action) : actions associated with given schema, gets updated to include actions associated with saving the schema IDK
+            schema (list): dict of dicts, all keys are Python types matching a DataObject subclass, and the lowest levels are empty
+            action (Action): a set of SQL queries that perform multiple action with one Action object call
         
         Returns:
-            None"""
+            None"""        
         # 1. Convert the list of types to a list of str.
         str_schema = []
         for sch in schema:
@@ -104,27 +111,27 @@ class Dataset(DataObject):
 
         # 3. Save the schema to the database.        
         schema_id = IDCreator(action.conn).create_action_id()
-        # sqlquery = f"INSERT INTO data_address_schemas (schema_id, levels_edge_list, dataset_id, action_id) VALUES (?, ?, ?, ?)"
         params = (schema_id, json_schema, self.id, action.id)
         action.add_sql_query(self.id, "data_address_schemas_insert", params, group_name = "robj_complex_attr_insert")
+        # Set the file schema to the dataset schema if it is still the default value.
+        if self.file_schema == all_default_attrs["file_schema"]:
+            self.__setattr__("file_schema", schema, action)
 
     def load_schema(self, action: Action) -> list:
         """Load the schema from the database and convert it via json.
-
+        
         Args:
             self
             action (Action) : actions associated with the given schema
         
         Returns:
-            the given schema as a list of types IDK might be a list of something else
-        """
+            the given schema as a list of types IDK might be a list of something else"""
 
         # 1. Get the dataset ID
         id = self.id
         # 2. Get the most recent action ID for the dataset in the data_address_schemas table.
         schema_id = self.get_current_schema_id(id)
         sqlquery = f"SELECT levels_edge_list FROM data_address_schemas WHERE schema_id = '{schema_id}'"
-        # conn = ResearchObjectHandler.pool.get_connection()
         conn = action.conn
         result = conn.execute(sqlquery).fetchone()
 
@@ -169,6 +176,44 @@ class Dataset(DataObject):
         Returns:
             the dataset path (and associated Actions? IDK) as a string"""
         return ResearchObjectHandler.get_user_computer_path(self, "dataset_path", action)
+    
+    ### File Schema Methods
+
+    def validate_file_schema(self, file_schema: list, action: Action, default: Any) -> None:
+        """Validate that the file schema follows the proper format.
+        Must be a list of DataObjects.
+        
+        Args:
+            self
+            file_schema (list) : list of strings
+        
+        Returns:
+            None
+        
+        Raises:
+            ValueError: Incorrect file schema type"""
+        if file_schema == default:
+            return
+        if not isinstance(file_schema, list):
+            raise ValueError("The file schema must be a list!")
+        subclasses = DataObject.__subclasses__()
+        if not all([sch in subclasses for sch in file_schema]):
+            raise ValueError("The file schema must be a list of DataObject Types!")
+        schema_graph = nx.MultiDiGraph()
+        schema_graph.add_edges_from(self.schema)
+        if len(schema_graph.nodes()) > 0:
+            if not all([curr_type in schema_graph.nodes()]):
+                raise ValueError("The file schema must consist only of types found within the schema!")
+            
+    def to_json_file_schema(self, file_schema: list, action: Action) -> str:
+        """Convert the file schema to a json string."""
+        return json.dumps([file_schema.prefix for file_schema in file_schema])
+    
+    def from_json_file_schema(self, json_file_schema: str, action: Action) -> list:
+        """Convert the file schema from a json string to a list of DataObjects."""
+        prefix_file_schema = json.loads(json_file_schema)
+        subclasses = DataObject.__subclasses__()
+        return [cls for cls in subclasses for prefix in prefix_file_schema if cls.prefix == prefix]
         
     ### Address Methods
 
@@ -261,18 +306,25 @@ class Dataset(DataObject):
 
         return addresses
 
-    def get_addresses_graph(self) -> nx.MultiDiGraph:
+    def get_addresses_graph(self, objs: bool = False, action: Action = None) -> nx.MultiDiGraph:
         """Convert the addresses edge list to a MultiDiGraph.
-        
         Args:
             self
-        
+            addresses (list) : list of addresses
         Returns:
             nx.MultiDiGraph of addresses"""
         # action = Action("get_addresses_graph")
         addresses = self.addresses
         G = nx.MultiDiGraph()
-        G.add_edges_from(addresses)
+        if not objs:
+            G.add_edges_from(addresses)            
+        else:
+            for address in addresses:
+                cls0 = ResearchObjectHandler._prefix_to_class(address[0])
+                cls1 = ResearchObjectHandler._prefix_to_class(address[1])
+                node0 = cls0(id = address[0], action = action)
+                node1 = cls1(id = address[1], action = action)
+                G.add_edge(node0, node1)  
         return G
     
 if __name__=="__main__":

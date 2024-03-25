@@ -25,8 +25,8 @@ class DBInitializer():
         ResearchObjectHandler.counts = {} # Keep track of the number of instances of each ID.
         
         # Reset the connection pools for each database.
-        ResearchObjectHandler.pool = None
-        ResearchObjectHandler.pool_data = None
+        # ResearchObjectHandler.pool = None
+        # ResearchObjectHandler.pool_data = None
         SQLiteConnectionPool._instances = {"main": None, "data": None}
 
         # Remove database files.
@@ -50,7 +50,7 @@ class DBInitializer():
 
         self.db_file = main_db_file
         self.pool = SQLiteConnectionPool(name = "main")
-        ResearchObjectHandler.pool = self.pool
+        # ResearchObjectHandler.pool = self.pool
 
         self.action = Action(name = "initialize database", commit = True, exec = True, force_create = True)
                         
@@ -63,7 +63,7 @@ class DBInitializer():
 
         self.data_db_file = data_db_file
         self.pool_data = SQLiteConnectionPool(name = "data")
-        ResearchObjectHandler.pool_data = self.pool_data
+        # ResearchObjectHandler.pool_data = self.pool_data
         self.conn_data = self.pool_data.get_connection()
         self.create_tables_data_db()
         self.check_tables_exist(self.conn_data, intended_tables_data)
@@ -150,12 +150,14 @@ class DBInitializer():
                         dataobject_id TEXT NOT NULL,
                         schema_id TEXT NOT NULL,
                         vr_id TEXT NOT NULL,
+                        pr_id TEXT NOT NULL,
                         data_blob_hash TEXT NOT NULL,
                         FOREIGN KEY (action_id) REFERENCES actions(action_id) ON DELETE CASCADE,
                         FOREIGN KEY (dataobject_id) REFERENCES research_objects(object_id) ON DELETE CASCADE,
                         FOREIGN KEY (schema_id) REFERENCES data_address_schemas(schema_id) ON DELETE CASCADE,
-                        FOREIGN KEY (VR_id) REFERENCES research_objects(object_id) ON DELETE CASCADE,
-                        PRIMARY KEY (dataobject_id, vr_id, data_blob_hash, schema_id)
+                        FOREIGN KEY (vr_id) REFERENCES research_objects(object_id) ON DELETE CASCADE,
+                        FOREIGN KEY (pr_id) REFERENCES research_objects(object_id) ON DELETE CASCADE,
+                        PRIMARY KEY (action_id, dataobject_id, vr_id, data_blob_hash, schema_id)
                         )""")
         
         # Data addresses. Lists all data addresses for all data.
@@ -195,15 +197,18 @@ class DBInitializer():
                         )""")
         
         # PipelineObjects Graph table. Lists all pipeline objects and their relationships.
+        # The "edge_id" is typically a VR ID, but perhaps not always.
         cursor.execute("""CREATE TABLE IF NOT EXISTS pipelineobjects_graph (
                         action_id TEXT NOT NULL,
                         source_object_id TEXT NOT NULL,
                         target_object_id TEXT NOT NULL,
+                        edge_id TEXT NOT NULL,
                         is_active INTEGER NOT NULL DEFAULT 1,
                         FOREIGN KEY (source_object_id) REFERENCES research_objects(object_id) ON DELETE CASCADE,
                         FOREIGN KEY (target_object_id) REFERENCES research_objects(object_id) ON DELETE CASCADE,
                         FOREIGN KEY (action_id) REFERENCES actions(action_id) ON DELETE CASCADE,
-                        PRIMARY KEY (action_id, source_object_id, target_object_id)
+                        FOREIGN KEY (edge_id) REFERENCES research_objects(object_id) ON DELETE CASCADE,
+                        PRIMARY KEY (source_object_id, target_object_id, edge_id)
                         )""")
         
         # Users_Computers table. Maps all users to their computers.
@@ -213,6 +218,18 @@ class DBInitializer():
                         computer_id TEXT NOT NULL,
                         FOREIGN KEY (action_id) REFERENCES actions(action_id) ON DELETE CASCADE
                         )""")
+        
+        # PipelineObjects Graph table. Lists all pipeline objects and their relationships.
+        cursor.execute("""CREATE TABLE IF NOT EXISTS pipelineobjects_graph (
+                        action_id TEXT NOT NULL,
+                        source_object_id TEXT NOT NULL,
+                        target_object_id TEXT NOT NULL,
+                        is_active INTEGER NOT NULL DEFAULT 1,
+                        FOREIGN KEY (source_object_id) REFERENCES research_objects(object_id) ON DELETE CASCADE,
+                        FOREIGN KEY (target_object_id) REFERENCES research_objects(object_id) ON DELETE CASCADE,
+                        FOREIGN KEY (action_id) REFERENCES actions(action_id) ON DELETE CASCADE,
+                        PRIMARY KEY (action_id, source_object_id, target_object_id)
+                        )""")        
 
 
         

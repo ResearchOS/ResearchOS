@@ -1,6 +1,7 @@
 from typing import TYPE_CHECKING, Any, Callable
 import sys, os
 import json
+import copy
 
 import networkx as nx
 
@@ -19,6 +20,12 @@ class Validator():
         self.action = action
 
     def validate(self, attrs: dict, default_attrs: dict):
+        if "id" in attrs:
+            attrs = copy.copy(attrs)
+            del attrs["id"]
+        if "_initialized" in attrs:
+            attrs = copy.copy(attrs)
+            del attrs["_initialized"]   
         for key, value in attrs.items():            
             validate_method = getattr(self.robj, f'validate_{key}', None)
             method_in_ro = True

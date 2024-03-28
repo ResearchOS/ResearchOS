@@ -91,9 +91,9 @@ class ResearchObjectDigraph(MultiDiGraph):
                 pipeline_source_obj_edge_ids[source_obj_id].append(edge_id)
 
         # Add the "edge_ids" (VR's) from Process objects that are not used as inputs anywhere.
-        sqlquery_raw = "SELECT pr_id, vr_id FROM data_values WHERE schema_id = ?"
+        sqlquery_raw = "SELECT pr_id, vr_id FROM data_values"
         sqlquery = sql_order_result(action, sqlquery_raw, ["pr_id", "vr_id"], user = True, computer = False)
-        result = cursor.execute(sqlquery, (self.schema_id,)).fetchall()
+        result = cursor.execute(sqlquery).fetchall()
         for row in result:
             pipeline_source_obj_edge_ids[row[0]].append(row[1])
 

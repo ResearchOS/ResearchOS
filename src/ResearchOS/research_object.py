@@ -120,7 +120,7 @@ class ResearchObject():
         if not prev_exists:
             # Create a new object.
             query_name = "robj_exists_insert"
-            params = (self.id, action.id)
+            params = (self.id, action.id_num)
             action.add_sql_query(id, query_name, params, group_name = "robj_insert")                                
         
         loaded_attrs = {}
@@ -177,8 +177,8 @@ class ResearchObject():
         return True
 
     def _get_dataset_id(self) -> str:
-        """Get the most recent dataset ID."""        
-        sqlquery = f"SELECT dataset_id FROM data_address_schemas"
+        """Get the most recent dataset ID. Currently assumes that there's only one Dataset object in existence."""        
+        sqlquery = f"SELECT object_id FROM research_objects WHERE object_id LIKE 'DS%'"
         pool = SQLiteConnectionPool()
         conn = pool.get_connection()
         cursor = conn.cursor()

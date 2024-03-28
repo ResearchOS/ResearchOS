@@ -49,25 +49,25 @@ class DataObject(ResearchObject):
         Returns:
             Any: The value of the VR for this data object.
         """
-        func_result = {}
-        func_result["input_vrs_names_dict"] = None
         from ResearchOS.variable import Variable
+        func_result = {}
+        func_result["input_vrs_names_dict"] = None        
         # 1. Check that the data object & VR are currently associated. If not, throw an error.
         cursor = action.conn.cursor()
         self_idx = node_lineage.index(self)
         for node in node_lineage[self_idx:]:
             if isinstance(vr, Variable):
-                sqlquery_raw = "SELECT action_id, is_active FROM vr_dataobjects WHERE dataobject_id = ? AND vr_id = ?"
-                sqlquery = sql_order_result(action, sqlquery_raw, ["dataobject_id", "vr_id"], single = True, user = True, computer = False)
+                sqlquery_raw = "SELECT action_id_num, is_active FROM vr_dataobjects WHERE path_id = ? AND vr_id = ?"
+                sqlquery = sql_order_result(action, sqlquery_raw, ["path_id", "vr_id"], single = True, user = True, computer = False)
                 params = (node.id, vr.id)            
                 result = cursor.execute(sqlquery, params).fetchall()
                 if len(result) > 0:
                     break
-            else:
+            # else:
                 # TODO: Handle dict of {type: attr_name}
                 # If the value is a str, then it's a builtin attribute.
                 # Otherwise, if the value is a Variable, then it's a Variable and need to load its value. using self.load_vr_value()
-                pass
+                # pass
         if len(result) == 0:
             func_result["do_run"] = False
             func_result["exit_code"] = 1
@@ -85,9 +85,9 @@ class DataObject(ResearchObject):
             pr = process
         if not isinstance(pr, list):
             pr = [pr]
-        sqlquery_raw = "SELECT data_blob_hash, pr_id FROM data_values WHERE dataobject_id = ? AND vr_id = ? AND pr_id IN ({})".format(", ".join(["?" for _ in pr]))
+        sqlquery_raw = "SELECT data_blob_hash, pr_id, numeric_value, str_value FROM data_values WHERE path_id = ? AND vr_id = ? AND pr_id IN ({})".format(", ".join(["?" for _ in pr]))
         params = (node.id, vr.id) + tuple([pr_elem.id for pr_elem in pr])
-        sqlquery = sql_order_result(action, sqlquery_raw, ["dataobject_id", "vr_id"], single = True, user = True, computer = False)        
+        sqlquery = sql_order_result(action, sqlquery_raw, ["path_id", "vr_id"], single = True, user = True, computer = False)        
         result = cursor.execute(sqlquery, params).fetchall()
         if len(result) == 0:
             raise ValueError(f"The VR {vr.name} does not have a value set for the data object {node.id} from Process {process.id}.")
@@ -108,17 +108,26 @@ class DataObject(ResearchObject):
         data_hash = result[pr_idx][0]
 
         # 3. Get the value from the data_values table. 
-        pool_data = SQLiteConnectionPool(name = "data")
-        conn_data = pool_data.get_connection()
-        cursor_data = conn_data.cursor()
-        sqlquery = "SELECT data_blob FROM data_values_blob WHERE data_blob_hash = ?"        
-        params = (data_hash,)
-        value = cursor_data.execute(sqlquery, params).fetchone()[0]
-        pool_data.return_connection(conn_data)
+        if data_hash is not None:
+            pool_data = SQLiteConnectionPool(name = "data")
+            conn_data = pool_data.get_connection()
+            cursor_data = conn_data.cursor()
+            sqlquery = "SELECT data_blob FROM data_values_blob WHERE data_blob_hash = ?"        
+            params = (data_hash,)
+            pickled_value = cursor_data.execute(sqlquery, params).fetchone()[0]
+            value = pickle.loads(pickled_value)
+            pool_data.return_connection(conn_data)
+        else:
+            numeric_value = result[pr_idx][2]
+            str_value = result[pr_idx][3]
+            if numeric_value is not None:
+                value = numeric_value
+            else: # Omitting criteria here allows for str_value and numeric_value to both be None.
+                value = str_value
         func_result["do_run"] = True
         func_result["exit_code"] = 0
         func_result["message"] = f"Success in {self.name} ({self.id}). Lookup VR found: {vr_name_in_code} ({vr.id})"
-        func_result["vr_values_in"] = pickle.loads(value)
+        func_result["vr_values_in"] = value
         return func_result
 
     # def load_dataobject_vrs(self, action: Action) -> None:

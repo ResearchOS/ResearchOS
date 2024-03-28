@@ -61,7 +61,7 @@ class CodeRunner():
         CodeRunner.matlab_double_type = matlab_double_type
 
     @staticmethod
-    def set_vrs_source_pr(robj: "ResearchObject", action: Action, schema_id: str, default_attrs: dict) -> None:
+    def set_vrs_source_pr(robj: "ResearchObject", action: Action, default_attrs: dict) -> None:
         from ResearchOS.PipelineObjects.process import Process
         from ResearchOS.PipelineObjects.logsheet import Logsheet
         # add_vr_names_source_prs = [key for key, value in robj.input_vrs.items() if (key not in robj.vrs_source_pr.keys() and not isinstance(value["VR"], dict))]
@@ -76,9 +76,9 @@ class CodeRunner():
             add_vrs_source_prs_from_lookup_vars = [list(vr.keys())[0].id for vr in robj.lookup_vrs.values() if vr not in robj.vrs_source_pr.values()]
         add_vrs_source_prs = add_vrs_source_prs_from_input_vars + add_vrs_source_prs_from_lookup_vars        
         if len(add_vrs_source_prs) > 0:
-            sqlquery_raw = "SELECT vr_id, pr_id FROM data_values WHERE vr_id IN ({}) AND schema_id = ?".format(",".join(["?" for _ in add_vrs_source_prs]))
+            sqlquery_raw = "SELECT vr_id, pr_id FROM data_values WHERE vr_id IN ({})".format(",".join(["?" for _ in add_vrs_source_prs]))
             sqlquery = sql_order_result(action, sqlquery_raw, ["vr_id"], single = True, user = True, computer = False)
-            params = tuple([vr_id for vr_id in add_vrs_source_prs] + [schema_id])
+            params = tuple([vr_id for vr_id in add_vrs_source_prs])
             vr_pr_ids_result = action.conn.cursor().execute(sqlquery, params).fetchall()
             vrs_source_prs_tmp = {}
             for vr_name_in_code, vr in robj.input_vrs.items():
@@ -125,22 +125,39 @@ class CodeRunner():
         return lowest_level
     
     @staticmethod
-    def get_level_nodes_sorted(robj: "ResearchObject", action: Action, subset_graph: list) -> list:
+    def get_level_nodes_sorted(robj: "ResearchObject", action: Action, paths: list, dobj_ids: list, subset_graph: nx.MultiDiGraph) -> list:
         """Get the nodes for this level, sorted by name."""
-        level_node_ids = [node for node in subset_graph if node.startswith(robj.level.prefix)]
-        name_attr_id = ResearchObjectHandler._get_attr_id("name")
-        sqlquery_raw = "SELECT object_id, attr_value FROM simple_attributes WHERE attr_id = ? AND object_id LIKE ?"
-        sqlquery = sql_order_result(action, sqlquery_raw, ["object_id"], single = True, user = True, computer = False)
-        params = (name_attr_id, f"{robj.level.prefix}%")
-        level_nodes_ids_names = action.conn.cursor().execute(sqlquery, params).fetchall()
-        level_nodes_ids_names.sort(key = lambda x: x[1])
-        level_node_ids_sorted = [row[0] for row in level_nodes_ids_names if row[0] in level_node_ids]
-        return level_node_ids_sorted
+        # Get the indices in the paths and dobj_ids for the nodes in this subgraph.
+        subgraph_idx = []
+        for path in paths:
+            if all([node in subset_graph.nodes() for node in path]):
+                subgraph_idx.append(paths.index(path))
+        
+        dobj_ids = [dobj_ids[index] for index in subgraph_idx]
+        paths = [paths[index] for index in subgraph_idx]
+        dataset = [n for n in subset_graph.nodes if subset_graph.in_degree(n) == 0][0]
+        paths.append([dataset])
+        dobj_ids.append(dataset)
+        level_node_ids_with_indices = [(index, dobj) for index, dobj in enumerate(dobj_ids) if dobj.startswith(robj.level.prefix)]        
+        level_node_ids = [x[1] for x in level_node_ids_with_indices]
+        indices = [x[0] for x in level_node_ids_with_indices]
+
+        # Sort paths and remember the original indices
+        level_paths = [paths[idx] for idx in indices] # Isolate just the paths at this level.
+        sorted_paths_with_original_indices = sorted(enumerate(level_paths), key = lambda x: x[1][-1])
+
+        # Create a mapping from the original index to the sorted index
+        index_map = {original: new for new, (original, _) in enumerate(sorted_paths_with_original_indices)}
+
+        # Sort the level_node_ids
+        level_node_ids_sorted = [level_node_ids[index_map[i]] for i in range(len(level_node_ids))]
+
+        return level_node_ids_sorted, paths, dobj_ids
     
     @staticmethod
-    def get_batches_dict_to_run(robj: "ResearchObject", subset_graph: nx.MultiDiGraph, schema_ordered: list, lowest_level: str, level_node_ids_sorted: list) -> dict:
+    def get_batches_dict_to_run(robj: "ResearchObject", subset_graph: nx.MultiDiGraph, schema_ordered: list, lowest_level: str, level_node_ids_sorted: list, paths: list, dobj_ids: list) -> dict:
         if robj.batch is not None:
-            all_batches_graph = CodeRunner.get_batch_graph(robj, robj.batch, subset_graph, schema_ordered, lowest_level)
+            all_batches_graph = CodeRunner.get_batch_graph(robj, robj.batch, subset_graph, schema_ordered, lowest_level, paths, dobj_ids)
 
             # Parse the MultiDiGraph to get the batches to run.
             if robj.batch is None or len(robj.batch) == 0:
@@ -158,17 +175,19 @@ class CodeRunner():
                     return None
                 level = batch_list[0]
                 # Get the list of nodes that are connected to this node.
-                all_reachable_nodes = list(graph.successors(node))
-                level_nodes = [n for n in all_reachable_nodes if n.startswith(level.prefix)]
+                successors = list(graph.successors(node))
+                # level_nodes = [n for n in successors if n.startswith(level.prefix)]
                 # level_nodes = [n for n in level_nodes if set(node_lineage).issubset(set(list(nx.ancestors(subset_graph, n))))]
-                for n in level_nodes:
+                for n in successors:
                     batches_dict[n] = {}
                     node_lineage.append(n)
                     batches_dict[n] = graph_to_dict(graph, batches_dict[n], batch_list[1:], n, subset_graph, node_lineage)
                 return batches_dict
             
             batches_dict_to_run = {}
-            top_level_nodes = [node for node in all_batches_graph.nodes() if node.startswith(level.prefix)]
+            dataset_node = [paths[0][0]]
+            top_level_idx = schema_ordered.index(level)
+            top_level_nodes = list(set([p[top_level_idx] for p in paths if len(p) > top_level_idx]))
             for node in top_level_nodes:
                 batches_dict_to_run[node] = {}
                 batches_dict_to_run[node] = graph_to_dict(all_batches_graph, batches_dict_to_run[node], batch_list[1:], node, subset_graph, [node])
@@ -176,8 +195,8 @@ class CodeRunner():
             # Dict of dicts, where each top-level dict is a batch to run.
             # Get a top level node.
             any_top_level_node = [n for n in batches_dict_to_run][0]
-            descendant = list(nx.descendants(all_batches_graph, any_top_level_node))[0]
-            CodeRunner.depth = nx.shortest_path_length(all_batches_graph, any_top_level_node, descendant)
+            leafs = [n for n in all_batches_graph.nodes() if all_batches_graph.out_degree(n) == 0]
+            CodeRunner.depth = nx.shortest_path_length(all_batches_graph, any_top_level_node, leafs[0])
         else:
             batches_dict_to_run = {node: None for node in level_node_ids_sorted}
             CodeRunner.depth = 0
@@ -192,7 +211,7 @@ class CodeRunner():
         CodeRunner.highest_level = highest_level
         return batches_dict_to_run, all_batches_graph
     
-    def get_batch_graph(robj: "ResearchObject", batch: list, subgraph: nx.MultiDiGraph = nx.MultiDiGraph(), schema_ordered: list = [], lowest_level: type = None) -> dict:
+    def get_batch_graph(robj: "ResearchObject", batch: list, subgraph: nx.MultiDiGraph = nx.MultiDiGraph(), schema_ordered: list = [], lowest_level: type = None, paths: list = [], dobj_ids: list = []) -> dict:
         """Get the batch dictionary of DataObject names. Needs to be recursive to account for the nested dicts.
         At the lowest level, if there are multiple DataObjects, they will also be a dict, each being one key, with its value being None.
         Note that the Dataset node should always be in the subgraph."""
@@ -205,21 +224,31 @@ class CodeRunner():
         if lowest_level not in batch:
             batch = batch + schema_ordered[lowest_level_idx:]
 
-        nodes = [n for b in batch for n in subgraph.nodes() if n.startswith(b.prefix)]
+        batch_idx_in_schema = [schema_ordered.index(cls)+1 for cls in batch]
+
+        paths_in_batch = [path for path in paths if len(path) in batch_idx_in_schema]
+        nodes = [path[-1] for path in paths_in_batch]
+
         batch_graph = nx.MultiDiGraph()
         batch_graph.add_nodes_from(nodes)
 
-        # Add the missing edges to the batch graph.
-        all_nodes_dict = {cls: [n for n in subgraph.nodes() if n.startswith(cls.prefix)] for cls in batch}
-        for idx in range(len(batch) - 1):
-            top_level = batch[idx]
-            bottom_level = batch[idx + 1]
-            top_level_nodes = all_nodes_dict[top_level]
-            bottom_level_nodes = all_nodes_dict[bottom_level]
-            for top_level_node in top_level_nodes:
-                for bottom_level_node in bottom_level_nodes:
-                    if nx.has_path(subgraph, top_level_node, bottom_level_node) or nx.has_path(subgraph, bottom_level_node, top_level_node):
-                        batch_graph.add_edge(top_level_node, bottom_level_node)
+        dataset_node = paths[0][0]
+        batch_graph.add_node(dataset_node)
+        
+        for path in paths_in_batch:
+            batch_path = [path[idx-1] if idx-1 < len(path) else None for idx in batch_idx_in_schema]
+            # batch_idx_in_schema_subtracted = [idx - 1 for idx in batch_idx_in_schema if idx - 1 < len(path)]
+            # arranged_path = [path[idx] for idx in batch_idx_in_schema_subtracted[0:len(path)]]
+            # batch_path = [n for n in arranged_path if n in batch_graph.nodes()]
+            # if len(batch_path) == 1:
+            #     # Avoid self-loops
+            #     if dataset_node != batch_path[0] and (dataset_node, batch_path[0]) not in batch_graph.edges():
+            #         batch_graph.add_edge(dataset_node, batch_path[0])
+            for idx in range(len(batch_path) - 1):
+                edge = (batch_path[idx], batch_path[idx + 1])
+                if all([e is not None for e in edge]) and edge not in batch_graph.edges():
+                    batch_graph.add_edge(edge[0], edge[1])
+
         return batch_graph
     
     def prep_for_run(self, robj: "ResearchObject", action: Action, force_redo: bool = False) -> None:
@@ -233,17 +262,25 @@ class CodeRunner():
         self.force_redo = force_redo
 
         ds = Dataset(id = robj._get_dataset_id(), action = action)
-        schema_id = robj.get_current_schema_id(ds.id)
 
         self.dataset = ds
-        self.schema_id = schema_id
 
         CodeRunner.import_matlab(robj.is_matlab)
+
+        # Get the paths and the associated path ID's.
+        sqlquery = "SELECT dataobject_id, path FROM paths"
+        cursor = action.conn.cursor()
+        result = cursor.execute(sqlquery).fetchall()        
+        paths = [[ds.name] + json.loads(row[1]) for row in result]
+        dobj_ids = [row[0] for row in result]
+
+        self.paths = paths
+        self.dobj_ids = dobj_ids
                 
         # 4. Run the method.
         # Get the subset of the data.
         subset = Subset(id = robj.subset_id, action = action)
-        subset_graph = subset.get_subset(action)
+        subset_graph = subset.get_subset(action, paths, dobj_ids)
 
         self.subset_graph = subset_graph
                 
@@ -271,16 +308,16 @@ class CodeRunner():
         G = CodeRunner.dataset_object_graph
 
         # Set the vrs_source_prs for any var that it wasn't set for.
-        CodeRunner.set_vrs_source_pr(robj, action, schema_id, default_attrs)
+        CodeRunner.set_vrs_source_pr(robj, action, default_attrs)
 
         # Get the lowest level for this batch.
         schema_ordered = [n for n in nx.topological_sort(schema_graph)]
         self.schema_order = schema_ordered
         lowest_level = CodeRunner.get_lowest_level(robj, schema_ordered)
 
-        level_node_ids_sorted = CodeRunner.get_level_nodes_sorted(robj, action, subset_graph)
+        level_node_ids_sorted, paths, dobj_ids = CodeRunner.get_level_nodes_sorted(robj, action, paths, dobj_ids, subset_graph)
             
-        batches_dict_to_run, all_batches_graph = CodeRunner.get_batches_dict_to_run(robj, subset_graph, schema_ordered, lowest_level, level_node_ids_sorted)
+        batches_dict_to_run, all_batches_graph = CodeRunner.get_batches_dict_to_run(robj, subset_graph, schema_ordered, lowest_level, level_node_ids_sorted, paths, dobj_ids)
         if len(batches_dict_to_run) == 0:
             print("<<< WARNING: NO NODES TO RUN. >>>")
             time.sleep(2)
@@ -288,16 +325,16 @@ class CodeRunner():
     
     def get_node_info(self, node_id: str) -> dict:
         """Provide the node lineage information for conditional debugging in the scientific code."""
-        anc_nodes = nx.ancestors(self.subset_graph, node_id)
-        anc_nodes_list = [node for node in nx.topological_sort(self.subset_graph.subgraph(anc_nodes))][::-1]
-        node_lineage = [node_id] + [node for node in anc_nodes_list]
+        path_idx = self.dobj_ids.index(node_id)
+        path = self.paths[path_idx]
+        classes = DataObject.__subclasses__()
+        cls = [cls for cls in classes if cls.prefix == node_id[0:2]][0]
+        node_lineage = self.get_node_lineage(cls(id = node_id), self.subset_graph)
         info = {}        
         info["lineage"] = {}
-        classes = DataObject.__subclasses__()
+        
         assert len(node_lineage) == len(self.schema_order)
-        for node_id in node_lineage:
-            cls = [cls for cls in classes if cls.prefix == node_id[0:2]][0]
-            node = cls(id = node_id, action = self.action)
+        for node in node_lineage:
             prefix = cls.prefix
             info["lineage"][prefix] = {}
             info["lineage"][prefix]["name"] = node.name
@@ -311,11 +348,13 @@ class CodeRunner():
             self.run_node(batch_id, G)
             return
         
-        lowest_nodes = [node for node in batch_graph.nodes if node.startswith(self.lowest_level.prefix)]
+        lowest_nodes = [node for node in batch_graph.nodes() if batch_graph.out_degree(node) == 0]
 
         for node in lowest_nodes:
             self.node_id = node
-            self.node = self.lowest_level(id = node)
+            path_idx = [idx for idx, path in enumerate(self.paths) if path[-1] == node][0]
+            dobj_id = self.dobj_ids[path_idx]
+            self.node = self.lowest_level(id = dobj_id)
             result = self.check_if_run_node(node, G)
             if not result["do_run"]:
                 return
@@ -323,14 +362,20 @@ class CodeRunner():
                 batch_graph.nodes[node][vr_name_in_code] = vr_val
 
         # Now that all the input VR's have been gotten, change the node to the one to save the output VR's to.
-        self.node = self.highest_level(id = batch_id)
+        if batch_id == self.dataset.name:
+            batch_node = self.dataset.id
+        else:
+            batch_node_idx = [idx for idx, node in enumerate(self.paths) if node[-1] == batch_id][0]
+            batch_node = self.dobj_ids[batch_node_idx]
+        self.node = self.highest_level(id = batch_node)
                 
         def process_dict(self, batch_graph, input_dict, G, vr_name_in_code: str = None):
             all_keys = list(input_dict.keys())
             if any(isinstance(key, int) for key in all_keys):
                 raise ValueError("Check your batch list, no Variables at this level.")
             is_var_name_in_code = all_keys == list(self.pl_obj.input_vrs.keys())
-            do_recurse = is_var_name_in_code or not any([all_keys[i].startswith(self.lowest_level.prefix) for i in range(len(all_keys))])
+            leaf_nodes = [n for n in batch_graph.nodes() if batch_graph.out_degree(n) == 0]
+            do_recurse = is_var_name_in_code or not all([key in leaf_nodes for key in all_keys])
             if do_recurse and isinstance(input_dict, dict):
                 for value in input_dict.values():
                     process_dict(self, batch_graph, value, G, vr_name_in_code)
@@ -420,17 +465,25 @@ class CodeRunner():
     def get_node_lineage(self, node: DataObject, G: nx.MultiDiGraph) -> list:
         """Get the lineage of the DataObject node.
         """
-        anc_nodes = nx.ancestors(G, node)
-        if len(anc_nodes) == 0:
+
+        if node.name == self.dataset.name:
             return [node]
-        anc_nodes = [node for node in nx.topological_sort(G.subgraph(anc_nodes))][::-1]
-        # anc_nodes = []
-        # idx = self.schema_order.index(node.__class__)
-        # sublist = self.schema_order[idx:]
-        # for idx, level in enumerate(sublist.reverse()):
-        #     anc_nodes.append(anc_nodes_list[idx])                         
-        node_lineage = [node] + anc_nodes # Smallest to largest.
-        return node_lineage
+        node_id = node.id
+        node_id_idx = self.dobj_ids.index(node_id)
+        path = self.paths[node_id_idx]
+        path = path[0:path.index(node.name)+1]
+
+        node_lineage = [self.dataset.name]
+        for idx in range(1,len(path)):
+            row_idx = self.paths.index(path[0:idx+1])
+            node_lineage.append(self.dobj_ids[row_idx])
+        subclasses = DataObject.__subclasses__()
+        node_lineage_objs = []
+        for node_id in node_lineage:
+            cls = [cls for cls in subclasses if cls.prefix == node_id[0:2]][0]
+            anc_node = cls(id = node_id, action = self.action)
+            node_lineage_objs.append(anc_node)
+        return node_lineage_objs[::-1] # Because expecting smallest first.
 
     def get_input_vrs(self, G: nx.MultiDiGraph) -> dict:
         """Load the input variables.
@@ -478,8 +531,11 @@ class CodeRunner():
                         return result # The file does not exist. Skip this node.
                     
                     # Currently assumes that all DataObjects have unique names across the entire dataset.
-                    lookup_dataobject = [n for n in G.nodes if n.name == result["vr_values_in"]][0]
-                    node_lineage_use = self.get_node_lineage(lookup_dataobject, G)
+                    lookup_dataobject_name = [n for n in G.nodes if n == result["vr_values_in"]][0]
+                    path_idx = [i for i, p in enumerate(self.paths) if lookup_dataobject_name == p[-1]][0]                    
+                    lookup_dataobject = self.dobj_ids[path_idx]
+                    cls = [cls for cls in DataObject.__subclasses__() if cls.prefix == lookup_dataobject[0:2]][0]
+                    node_lineage_use = self.get_node_lineage(cls(id = lookup_dataobject), G)
                     curr_node = node_lineage_use[0] # Replace the current node if needed.
                     break                    
 
@@ -554,15 +610,15 @@ class CodeRunner():
         if not hasattr(pr, "output_vrs"):
             return output_vrs_earliest_time
         output_vr_ids = [vr.id for vr in pr.output_vrs.values()]
-        sqlquery_raw = "SELECT action_id FROM data_values WHERE dataobject_id = ? AND vr_id IN ({})".format(",".join("?" * len(output_vr_ids)))
-        sqlquery = sql_order_result(self.action, sqlquery_raw, ["dataobject_id", "vr_id"], single = True, user = True, computer = False) # The data is ordered. The most recent action_id is the first one.
+        sqlquery_raw = "SELECT action_id_num FROM data_values WHERE path_id = ? AND vr_id IN ({})".format(",".join("?" * len(output_vr_ids)))
+        sqlquery = sql_order_result(self.action, sqlquery_raw, ["path_id", "vr_id"], single = True, user = True, computer = False) # The data is ordered. The most recent action_id is the first one.
         params = tuple([self.node.id] + output_vr_ids)
         result = cursor.execute(sqlquery, params).fetchall() # The latest action ID
         if len(result) == 0:
             return output_vrs_earliest_time
         else:                
             most_recent_action_id = result[0][0] # Get the latest action_id.
-            sqlquery = "SELECT datetime FROM actions WHERE action_id = ?"
+            sqlquery = "SELECT datetime FROM actions WHERE action_id_num = ?"
             params = (most_recent_action_id,)
             result = cursor.execute(sqlquery, params).fetchall()
             output_vrs_earliest_time = datetime.strptime(result[0][0], "%Y-%m-%d %H:%M:%S.%f%z")
@@ -591,14 +647,14 @@ class CodeRunner():
             
             # Hard coded. Return when the hard coded value was last set.
             if vr.hard_coded_value is not None:
-                sqlquery_raw = "SELECT action_id FROM simple_attributes WHERE object_id = ? AND attr_id = ? AND attr_value = ?"
+                sqlquery_raw = "SELECT action_id_num FROM simple_attributes WHERE object_id = ? AND attr_id = ? AND attr_value = ?"
                 sqlquery = sql_order_result(self.action, sqlquery_raw, ["object_id", "attr_id", "attr_value"], single = True, user = True, computer = False)
                 attr_id = ResearchObjectHandler._get_attr_id("hard_coded_value")
                 params = (vr.id, attr_id, json.dumps(vr.hard_coded_value)) # Has to be JSON encoded.
                 result = cursor.execute(sqlquery, params).fetchall()
                 if len(result) == 0:
                     return datetime.max.replace(tzinfo=timezone.utc) # Force the process to run.
-                sqlquery = "SELECT datetime FROM actions WHERE action_id = ?"
+                sqlquery = "SELECT datetime FROM actions WHERE action_id_num = ?"
                 params = (result[0][0],)
                 result = cursor.execute(sqlquery, params).fetchall()
                 new_time = datetime.strptime(result[0][0], "%Y-%m-%d %H:%M:%S.%f%z")
@@ -607,15 +663,15 @@ class CodeRunner():
                 continue
             
             # Dynamic input variable. Return when the data blob hash was last set for this VR & data object.
-            sqlquery_raw = "SELECT action_id, data_blob_hash FROM data_values WHERE vr_id = ? AND schema_id = ?"
-            sqlquery = sql_order_result(self.action, sqlquery_raw, ["vr_id", "schema_id"], single = True, user = True, computer = False)
-            params = (vr.id, self.schema_id)
+            sqlquery_raw = "SELECT action_id_num, data_blob_hash FROM data_values WHERE vr_id = ?"
+            sqlquery = sql_order_result(self.action, sqlquery_raw, ["vr_id"], single = True, user = True, computer = False)
+            params = (vr.id,)
             result = cursor.execute(sqlquery, params).fetchall()
             if len(result) == 0:
                 return datetime.max.replace(tzinfo=timezone.utc) # Force the process to run.
 
             latest_action_id = result[0][0]
-            sqlquery = "SELECT datetime FROM actions WHERE action_id = ?"
+            sqlquery = "SELECT datetime FROM actions WHERE action_id_num = ?"
             params = (latest_action_id,)
             result = cursor.execute(sqlquery, params).fetchall()
             new_time = datetime.strptime(result[0][0], "%Y-%m-%d %H:%M:%S.%f%z")

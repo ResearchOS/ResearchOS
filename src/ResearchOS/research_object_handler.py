@@ -146,7 +146,7 @@ class ResearchObjectHandler:
 
             json_value = JSONConverter.to_json(research_object, key, kwargs[key], action) 
 
-            simple_params = (action.id, research_object.id, ResearchObjectHandler._get_attr_id(key), json_value)
+            simple_params = (action.id_num, research_object.id, ResearchObjectHandler._get_attr_id(key), json_value)
             action.add_sql_query(research_object.id, "robj_simple_attr_insert", simple_params, group_name = "robj_simple_attr_insert")
 
             # 4. Get the parameters for the SQL query to set the attribute.            
@@ -176,9 +176,19 @@ class ResearchObjectHandler:
         # 1. Get hash of each value.
         vr_hashes_dict = {}
         for vr, value in vr_values.items():
-            data_blob = pickle.dumps(value, protocol = 4)
-            data_blob_hash = sha256(data_blob).hexdigest()
-            vr_hashes_dict[vr] = {"hash": data_blob_hash, "blob": data_blob}
+            # Check if the value is a scalar.            
+            try:
+                if value is not None and not isinstance(value, str):
+                    assert len(value > 0) == 1 # This will capture numpy arrays of length 1 as scalar values, which is OK, but exclude longer numpy arrays.
+                    tmp = json.dumps(value) # Ensure it is a standard object by running json.dumps() on it.
+                scalar_value = value
+                data_blob = None
+                data_blob_hash = None
+            except:
+                scalar_value = None
+                data_blob = pickle.dumps(value, protocol = 4)
+                data_blob_hash = sha256(data_blob).hexdigest()
+            vr_hashes_dict[vr] = {"hash": data_blob_hash, "blob": data_blob, "scalar_value": scalar_value}
 
         # 2. Check which VR's hashes are already in the data database so as not to duplicate a value/hash (primary key)
         pool_data = SQLiteConnectionPool(name = "data")
@@ -192,21 +202,24 @@ class ResearchObjectHandler:
         for vr in vr_hashes_dict:
             for row in result:
                 hash = row[0]
-                if hash == vr_hashes_dict[vr]["hash"]:
+                if hash is not None and hash == vr_hashes_dict[vr]["hash"]:
                     vr_hashes_prev_exist.append(vr)
                     break    
 
         # 2. Insert the values into the proper tables.
-        schema_id = research_object.get_current_schema_id(research_object._get_dataset_id())
+        # schema_id = research_object.get_current_schema_id(research_object._get_dataset_id())
         for vr in vr_hashes_dict:
             blob_params = (vr_hashes_dict[vr]["hash"], vr_hashes_dict[vr]["blob"])
             blob_pk = blob_params
-            vr_dobj_params = (action.id, research_object.id, vr.id)
+            vr_dobj_params = (action.id_num, research_object.id, vr.id)
             vr_dobj_pk = vr_dobj_params
-            vr_value_params = (action.id, vr.id, research_object.id, schema_id, vr_hashes_dict[vr]["hash"], pr_id)
+            if isinstance(vr_hashes_dict[vr]["scalar_value"], str):
+                vr_value_params = (action.id_num, vr.id, research_object.id, vr_hashes_dict[vr]["hash"], pr_id, vr_hashes_dict[vr]["scalar_value"], None)
+            else:
+                vr_value_params = (action.id_num, vr.id, research_object.id, vr_hashes_dict[vr]["hash"], pr_id, None, vr_hashes_dict[vr]["scalar_value"])
             vr_value_pk = vr_value_params
             # Don't insert the data_blob if it already exists.
-            if not vr in vr_hashes_prev_exist:
+            if not vr in vr_hashes_prev_exist and vr_hashes_dict[vr]["hash"] is not None:
                 if not action.is_redundant_params(research_object.id, "data_value_in_blob_insert", blob_pk, group_name = "robj_vr_attr_insert"):
                     action.add_sql_query(research_object.id, "data_value_in_blob_insert", blob_params, group_name = "robj_vr_attr_insert")
             # No danger of duplicating primary keys, so no real need to check if they previously existed. But why not?
@@ -356,7 +369,7 @@ class ResearchObjectHandler:
         """Get a user- and computer-specific path, which is a simple attribute in the database."""
         # Load the most recent path.
         attr_id = ResearchObjectHandler._get_attr_id(attr_name)
-        sqlquery_raw = "SELECT action_id, attr_value FROM simple_attributes WHERE attr_id = ? AND object_id = ?"
+        sqlquery_raw = "SELECT action_id_num, attr_value FROM simple_attributes WHERE attr_id = ? AND object_id = ?"
         sqlquery = sql_order_result(action, sqlquery_raw, ["attr_id", "object_id"], single = True, user = True, computer = True)
         params = (attr_id, research_object.id)
         result = action.conn.execute(sqlquery, params).fetchall()
@@ -366,19 +379,19 @@ class ResearchObjectHandler:
         path = json.loads(path)
 
         # Get the timestamp of this action_id
-        sqlquery = "SELECT datetime FROM actions WHERE action_id = ?"
+        sqlquery = "SELECT datetime FROM actions WHERE action_id_num = ?"
         params = (result[0][0],)
         timestamp_path = action.conn.execute(sqlquery, params).fetchone()[0]
         
         # Check if the action_id is after the current user/computer action_id.
-        sqlquery_raw = "SELECT action_id FROM users_computers WHERE user_id = ? AND computer_id = ?"
+        sqlquery_raw = "SELECT action_id_num FROM users_computers WHERE user_id = ? AND computer_id = ?"
         # sqlquery = sql_order_result(action, sqlquery_raw, ["user_id", "computer_id"], single = True, user = False, computer = False)
         sqlquery = sql_joiner_most_recent(sqlquery_raw)
         params = (CurrentUser.current_user, COMPUTER_ID)
         action_id_users = action.conn.execute(sqlquery, params).fetchone()[0]
 
         # Get the timestamp for when the user ID was set.
-        sqlquery = "SELECT datetime FROM actions WHERE action_id = ?"
+        sqlquery = "SELECT datetime FROM actions WHERE action_id_num = ?"
         params = (action_id_users,)
         timestamp_users = action.conn.execute(sqlquery, params).fetchone()[0]
 

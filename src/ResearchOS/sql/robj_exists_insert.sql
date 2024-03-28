@@ -1,1 +1,1 @@
-INSERT INTO research_objects (object_id, action_id) VALUES (?, ?)
+INSERT INTO research_objects (object_id, action_id_num) VALUES (?, ?)

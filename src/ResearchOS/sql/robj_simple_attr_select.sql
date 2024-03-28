@@ -1,1 +1,1 @@
-SELECT action_id, attr_id, attr_value FROM simple_attributes WHERE object_id = ?
+SELECT action_id_num, attr_id, attr_value FROM simple_attributes WHERE object_id = ?

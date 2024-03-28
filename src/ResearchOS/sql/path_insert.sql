@@ -1,0 +1,1 @@
+INSERT INTO paths (action_id_num, dataobject_id, path) VALUES (?, ?, ?)

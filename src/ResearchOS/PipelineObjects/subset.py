@@ -90,20 +90,16 @@ class Subset(PipelineObject):
                 raise ValueError("Value must be a list of lists or dicts.")
             a = [self.validate_conditions(cond, action, default = default) for cond in value] # Assigned to a just to make interpreter happy.
             
-    def get_subset(self, action: Action) -> nx.MultiDiGraph:
-        """Resolve the conditions to the actual subset of data."""
-        from ResearchOS.DataObjects.data_object import DataObject
+    def get_subset(self, action: Action, paths: list, dobj_ids: list) -> nx.MultiDiGraph:
+        """Resolve the conditions to the actual subset of data."""        
         print(f'Getting subset of DataObjects: {self.name} ({self.id})')
         # 1. Get the dataset.
         dataset_id = self._get_dataset_id()
         ds = Dataset(id = dataset_id)
-        schema_id = self.get_current_schema_id(ds.id)
 
         # 2. For each node_id in the address_graph, check if it meets the conditions.
         nodes_for_subgraph = [ds.id]
         G = ds.get_addresses_graph()
-        sorted_nodes = list(nx.topological_sort(G))
-        subclasses = DataObject.__subclasses__()
 
         # Loop through all conditions in the conditions dict. Handle when the condition is a list or a dict.
         conditions_list = []
@@ -111,9 +107,9 @@ class Subset(PipelineObject):
         vr_ids = [cond[0] for cond in conditions_list]
 
         # Get the hashes
-        sqlquery_raw = "SELECT data_blob_hash, dataobject_id, vr_id FROM data_values WHERE vr_id IN ({}) AND schema_id = ?".format(", ".join(["?" for _ in vr_ids]))
-        sqlquery = sql_order_result(action, sqlquery_raw, ["dataobject_id", "vr_id"], single = False, user = True, computer = False)
-        params = tuple(vr_ids) + (schema_id,)
+        sqlquery_raw = "SELECT data_blob_hash, path_id, vr_id, str_value, numeric_value FROM data_values WHERE vr_id IN ({})".format(", ".join(["?" for _ in vr_ids]))
+        sqlquery = sql_order_result(action, sqlquery_raw, ["path_id", "vr_id"], single = False, user = True, computer = False)
+        params = tuple(vr_ids)
         cursor = action.conn.cursor()
         result = cursor.execute(sqlquery, params).fetchall()
 
@@ -121,8 +117,9 @@ class Subset(PipelineObject):
         pool_data = SQLiteConnectionPool(name = "data")
         conn_data = pool_data.get_connection()
         cursor_data = conn_data.cursor()
-        sqlquery = "SELECT data_blob, data_blob_hash FROM data_values_blob WHERE data_blob_hash IN ({})".format(", ".join(["?" for _ in result]))
-        params = tuple([x[0] for x in result])
+        hashes_result = list(set([x for x in result if x[0] is not None]))
+        params = tuple(set([x[0] for x in hashes_result]))
+        sqlquery = "SELECT data_blob, data_blob_hash FROM data_values_blob WHERE data_blob_hash IN ({})".format(", ".join(["?" for _ in params]))        
         values = cursor_data.execute(sqlquery, params).fetchall()
         pool_data.return_connection(conn_data)
         values = [list(item) for item in values]
@@ -136,19 +133,33 @@ class Subset(PipelineObject):
             data_blob_hash = row[0]
             dataobject_id = row[1]
             vr_id = row[2]
+            str_value = row[3]
+            numeric_value = row[4]
             if vr_id not in vr_values:
                 vr_values[vr_id] = {}
             if dataobject_id not in vr_values[vr_id]:
                 vr_values[vr_id][dataobject_id] = None
-            blob_hash_idx = [x[1] for x in values].index(data_blob_hash)
-            vr_values[vr_id][dataobject_id] = values[blob_hash_idx][0]
+            if data_blob_hash is not None:
+                blob_hash_idx = [x[1] for x in values].index(data_blob_hash)
+                value = values[blob_hash_idx][0]
+            elif str_value is not None:
+                value = str_value
+            elif numeric_value is not None:
+                value = numeric_value
+            vr_values[vr_id][dataobject_id] = value
 
-        for node_id in sorted_nodes:
-            if not self._meets_conditions(node_id, self.conditions, G, vr_values, action):
-                continue
-            curr_nodes = [node_id]
-            curr_nodes.extend(nx.ancestors(G, node_id))
-            nodes_for_subgraph.extend([node_id for node_id in curr_nodes if node_id not in nodes_for_subgraph])
+        dataset_node = [n for n in G.nodes() if G.in_degree(n) == 0][0]        
+
+        for node_names_lineage in paths:
+
+            anc_nodes = [dataset_node]
+            for lineage_len in range(1,len(node_names_lineage)):
+                lin_idx = paths.index(node_names_lineage[:lineage_len+1])
+                anc_nodes.append(dobj_ids[lin_idx])
+
+            if not self._meets_conditions(anc_nodes[-1], self.conditions, G, vr_values, action, anc_nodes[0:-1]):
+                continue            
+            nodes_for_subgraph.extend([node for node in node_names_lineage if node not in nodes_for_subgraph])
 
         if len(nodes_for_subgraph) == 0:
             print(f"No nodes meet the conditions of {self.name} ({self.id}).")
@@ -171,16 +182,16 @@ class Subset(PipelineObject):
             return data
 
 
-    def _meets_conditions(self, node_id: str, conditions: dict, G: nx.MultiDiGraph, vr_values: dict, action: Action) -> bool:
+    def _meets_conditions(self, node_id: str, conditions: dict, G: nx.MultiDiGraph, vr_values: dict, action: Action, anc_nodes: list) -> bool:
         """Check if the node_id meets the conditions."""
         if isinstance(conditions, dict):
             if "and" in conditions:
                 for cond in conditions["and"]:
-                    if not self._meets_conditions(node_id, cond, G, vr_values, action):
+                    if not self._meets_conditions(node_id, cond, G, vr_values, action, anc_nodes):
                         return False
                 return True
             if "or" in conditions:
-                return any([self._meets_conditions(node_id, cond, G, vr_values, action) for cond in conditions["or"]])
+                return any([self._meets_conditions(node_id, cond, G, vr_values, action, anc_nodes) for cond in conditions["or"]])
                     
         # Check the condition.
         vr_id = conditions[0]
@@ -189,8 +200,7 @@ class Subset(PipelineObject):
         try:
             vr_value = vr_values[vr_id][node_id]
             found_attr = True
-        except:
-            anc_nodes = nx.ancestors(G, node_id)
+        except:            
             found_attr = False
             for anc_node_id in anc_nodes:
                 try:
@@ -219,6 +229,13 @@ class Subset(PipelineObject):
                 return False
             elif logic == "not in" and value is None:
                 return True
+            
+        if not isinstance(vr_value, str) and isinstance(value, str):
+            if logic in ("contains", "not contains"):
+                vr_value = [vr_value]
+            elif logic in ("in", "not in"):
+                value = [value]
+
 
         # Numeric
         bool_val = False

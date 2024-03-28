@@ -1,8 +1,11 @@
 from typing import Any
 import json, csv, platform, os
+import copy
 
 import networkx as nx
 import numpy as np
+
+import time
 
 from ResearchOS.DataObjects.data_object import DataObject
 from ResearchOS.variable import Variable
@@ -14,6 +17,7 @@ from ResearchOS.research_object_handler import ResearchObjectHandler
 from ResearchOS.idcreator import IDCreator
 from ResearchOS.default_attrs import DefaultAttrs
 from ResearchOS.DataObjects.data_object import load_data_object_classes
+from ResearchOS.validator import Validator
 
 # Defaults should be of the same type as the expected values.
 all_default_attrs = {}
@@ -298,12 +302,11 @@ class Logsheet(PipelineObject):
         
         Raises:
             ValueError: more header rows than logsheet rows or incorrect schema format?"""
+        global all_default_attrs
         action = Action(name = "read logsheet")
         ds = Dataset(id = self._get_dataset_id(), action = action)
-        self.validate_class_column_names(self.class_column_names, action, None)
-        self.validate_headers(self.headers, action, None)
-        self.validate_num_header_rows(self.num_header_rows, action, None)
-        self.validate_path(self.path, action, None)
+        validator = Validator(self, action)      
+        validator.validate(self.__dict__, all_default_attrs)
 
         # 1. Load the logsheet (using built-in Python libraries)
         if self.path.endswith(("xlsx", "xls")):
@@ -355,7 +358,7 @@ class Logsheet(PipelineObject):
                 if cls is cls_item:
                     dobj_column_names.append(column_name)
 
-        # Create the data objects.
+        start_get_dobj_names = time.time()
         # Get all of the names of the data objects, after they're cleaned for SQLite.
         cols_idx = [headers_in_logsheet.index(header) for header in dobj_column_names] # Get the indices of the data objects columns.
         dobj_names = [] # The matrix of data object names (values in the logsheet).
@@ -368,51 +371,33 @@ class Logsheet(PipelineObject):
                 dobj_names[-1].append(value)
         for row_num, row in enumerate(dobj_names):
             if not all([str(cell).isidentifier() for cell in row]):
-                raise ValueError(f"Row #{row_num+self.num_header_rows+1} (1-based): All data object names must be non-empty and valid variable names!")
-        [row.insert(0, ds.id) for row in dobj_names] # Prepend the Dataset to the first column of each row.
-        name_ids_dict = {} # The dict that maps the values (names) to the IDs. Separate dict for each class, each class is a top-level key of the dict.
-        name_ids_dict[Dataset] = {ds.name: ds.id}
-        name_dobjs_dict = {}
-        name_dobjs_dict[Dataset] = {ds.name: ds}
-        for cls in order:
-            name_ids_dict[cls] = {} # Initialize the dict for this class.            
-            name_dobjs_dict[cls] = {}
+                raise ValueError(f"Row #{row_num+self.num_header_rows+1} (1-based): All data object names must be non-empty and valid variable names!")        
+                        
+        for idx, cls in enumerate(order):
+            lists = list(set([tuple(row[0:idx+1]) for row in dobj_names]))
+            [dobj_names.append(list(l)) for l in lists if len(list(l)) < len(order) and list(l) not in dobj_names]
 
-        # Create the DataObject instances in the dict.        
-        all_dobjs_ordered = [] # The list of lists of DataObject instances, ordered by the order of the schema.        
+        all_dobjs_ordered = [] # The list of DataObject instances.
         id_creator = IDCreator(action.conn)
-        for row_num, row in enumerate(dobj_names):
-            row = row[1:]
-            all_dobjs_ordered.append([ds]) # Add the Dataset to the beginning of each row.
-            for idx in range(len(row)):
-                cls = order[idx] # The class to create.
-                col_idx = cols_idx[idx] # The index of the column in the logsheet.
-                value = self._clean_value(header_types[col_idx], row[idx])
-                # NEED TO CHECK NOT ONLY IF THE VALUE MATCHES, BUT WHETHER THE ENTIRE LINEAGE MATCHES.
-                # For example, condition names can be reused between subjects (though not within the same subject) but a new ID should be created for each lineage.
-                row_to_now = [ds.id] + row[0:idx+1]
-                is_new = True
-                if row_num > 0:
-                    for lst in dobj_names[0:row_num]:
-                        if set(row_to_now).issubset(set(lst)):
-                            is_new = False
-                            break
-                if is_new:
-                    name_ids_dict[cls][value] = id_creator.create_ro_id(cls) + "_" + value
-                    dobj = cls(id = name_ids_dict[cls][value], name = value, action = action) # Create the research object.
-                    name_dobjs_dict[cls][value] = dobj
-                    print("Creating DataObject, Row: ", row_num, "Column: ", cls.prefix, "Value: ", value, "ID: ", dobj.id)
-                dobj = name_dobjs_dict[cls][value]
-                all_dobjs_ordered[-1].append(dobj) # Matrix of all research objects.                                        
+        for row in dobj_names:
+            cls = order[len(row)-1] # The class to create.
+            all_dobjs_ordered.append(cls(id = id_creator.create_ro_id(cls), action = action, name = row[-1])) # Add the Data Object to the beginning of each row.                                      
         
         # Assign the values to the DataObject instances.
         # Validates that the logsheet is of valid format.
         # i.e. Doesn't have conflicting values for one level (empty/None is OK)
         attrs_cache_dict = {}
-        default_none_vals = {str: None, int: np.array(float('nan'))}
+        default_none_vals = {str: None, int: np.array(float('nan')), float: np.array(float('nan'))}
         for row_num, row in enumerate(logsheet):
-            row_dobjs = all_dobjs_ordered[row_num][1:]
             row_attrs = [{} for _ in range(len(order))] # The list of dicts of attributes for each DataObject instance.
+
+            # Get the list of data object names for this row.
+            row_dobj_names = dobj_names[row_num]
+            row_dobjs = []
+            for idx in range(len(row_dobj_names)):
+                curr_list = row_dobj_names[0:idx+1]
+                curr_list_idx = dobj_names.index(curr_list)
+                row_dobjs.append(all_dobjs_ordered[curr_list_idx])
 
             # Assign all of the data to the appropriate DataObject instances.
             # Includes the "data object columns" so that the DataObjects have an attribute with the name of the header name.
@@ -444,16 +429,18 @@ class Logsheet(PipelineObject):
         # Arrange the address ID's that were generated into an edge list.
         # Then assign that to the Dataset.
         addresses = []
-        for row in all_dobjs_ordered:
-            for idx, dobj in enumerate(row):
-                if idx == 0:
-                    continue
-                ids = [row[idx-1].id, dobj.id]
-                if ids not in addresses:
-                    addresses.append(ids)
+        dobj_names = [[ds.name] + row for row in dobj_names]
+        for row in dobj_names:
+            for idx in range(1, len(row)):
+                pair = [row[idx-1], row[idx]]
+                if pair not in addresses:
+                    addresses.append(pair)
         all_default_attrs = DefaultAttrs(ds)
         ds._setattrs(all_default_attrs.default_attrs, {"addresses": addresses}, action = action, pr_id = self.id)
-        # ds.addresses = addresses # Store addresses, also creates address_graph.
+
+        # Set all the paths to the DataObjects.
+        for idx, row in enumerate(dobj_names):
+            action.add_sql_query(all_dobjs_ordered[idx].id, "path_insert", (action.id_num, all_dobjs_ordered[idx].id, json.dumps(row[1:])))
 
         action.exec = True
         action.commit = True
@@ -474,5 +461,5 @@ class Logsheet(PipelineObject):
             if value is None:
                 value = np.array(float('nan'))
             else:
-                value = np.array(value)
+                value = float(value)
         return value

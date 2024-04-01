@@ -80,7 +80,7 @@ class ResearchObject():
 
         if not kwargs_dict:
             kwargs_dict = {name: value}
-        self._setattrs(all_attrs.default_attrs, kwargs_dict, action, None)
+        commit = self._setattrs(all_attrs.default_attrs, kwargs_dict, action, None)
         
         action.commit = commit
         action.exec = True
@@ -120,7 +120,7 @@ class ResearchObject():
         if not prev_exists:
             # Create a new object.
             query_name = "robj_exists_insert"
-            params = (self.id, action.id)
+            params = (self.id, action.id_num)
             action.add_sql_query(id, query_name, params, group_name = "robj_insert")                                
         
         loaded_attrs = {}
@@ -165,6 +165,8 @@ class ResearchObject():
             
         for key in del_keys:
             del kwargs[key]
+        if len(kwargs)==0:
+            return False
         # 1. Set simple & complex builtin attributes.
         ResearchObjectHandler._set_builtin_attributes(self, default_attrs, kwargs, action)
 
@@ -172,10 +174,11 @@ class ResearchObject():
         if pr_id is not None:
             vr_attrs = {k: v for k, v in kwargs.items() if k not in default_attrs}
             ResearchObjectHandler._set_vr_values(self, vr_attrs, action, pr_id)
+        return True
 
     def _get_dataset_id(self) -> str:
-        """Get the most recent dataset ID."""        
-        sqlquery = f"SELECT dataset_id FROM data_address_schemas"
+        """Get the most recent dataset ID. Currently assumes that there's only one Dataset object in existence."""        
+        sqlquery = f"SELECT object_id FROM research_objects WHERE object_id LIKE 'DS%'"
         pool = SQLiteConnectionPool()
         conn = pool.get_connection()
         cursor = conn.cursor()

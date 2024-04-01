@@ -38,15 +38,26 @@ class Action():
         # Set up for the queries.
         self.dobjs = {}
 
-        self.force_create = force_create
-        self.creation_params = (action_id, name, timestamp, redo_of) # The parameters for the creation query.
+        self.force_create = force_create        
         self.is_created = False # Indicates that the action has not been created in the database yet.        
         self.id = action_id
         self.name = name
         self.timestamp = timestamp        
         self.redo_of = redo_of
         self.commit = commit # False by default. If True, the action will be committed to the database. Overrides self.exec.
-        self.exec = exec # True to run cursor.execute() and False to skip it.
+        self.exec = exec # True to run cursor.execute() and False to skip it.        
+        try:
+            sqlquery = "SELECT MAX(action_id_num) FROM actions"
+            result = self.conn.execute(sqlquery).fetchone()[0] + 1
+        except:
+            sqlquery = "SELECT name FROM sqlite_master WHERE type='table' AND name='actions'"
+            result = self.conn.execute(sqlquery).fetchone()
+            if result is not None:
+                raise ValueError("The actions table exists, but there are no rows in it.")
+            else:
+                result = 1 # The actions table does not exist, so the action_id_num = 1
+        self.id_num = result
+        self.creation_params = (action_id, self.id_num, name, timestamp, redo_of) # The parameters for the creation query.
 
     def add_sql_query(self, dobj_id: str, query_name: str, params: tuple = None, group_name: str = "all") -> None:
         """Add a sqlquery to the action. Can be a raw SQL query (one input) or a parameterized query (two inputs).
@@ -105,7 +116,7 @@ class Action():
         cursor = self.conn.cursor()
         if not self.is_created or self.force_create:
             self.is_created = True
-            cursor.execute(self.queries["action_insert"], self.creation_params)
+            cursor.execute(self.queries["action_insert"], self.creation_params)            
 
         uses_data = False
         for group_name in self.dobjs:

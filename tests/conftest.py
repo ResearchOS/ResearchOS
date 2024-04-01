@@ -4,8 +4,6 @@ import weakref
 import ResearchOS as ros
 
 from ResearchOS.db_initializer import DBInitializer
-# from ResearchOS.db_connection_factory import DBConnectionFactory
-# from ResearchOS.db_connection import DBConnection
 from ResearchOS.sqlite_pool import SQLiteConnectionPool
 from ResearchOS.config import Config
 from ResearchOS.research_object_handler import ResearchObjectHandler

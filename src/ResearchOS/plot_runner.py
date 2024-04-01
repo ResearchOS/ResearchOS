@@ -40,7 +40,8 @@ class PlotRunner(CodeRunner):
         # - the file path to save the plot to
         lineage = self.get_node_lineage(self.node, self.dataset_object_graph)
         lineage.remove(self.dataset)
-        lineage.remove(self.node)
+        if self.node in lineage:
+            lineage.remove(self.node)
         dataset_parent_folder = os.path.dirname(self.dataset.dataset_path)
         plots_folder = os.path.join(dataset_parent_folder, "plots")
         save_path = os.path.join(plots_folder, pl.id + " " + pl.name)
@@ -48,7 +49,8 @@ class PlotRunner(CodeRunner):
             save_path = os.path.join(save_path, l.id)
         if not os.path.exists(save_path):
             os.makedirs(save_path)
-        save_path = os.path.join(save_path, self.node.id)
+        if self.node.id != self.dataset.id:
+            save_path = os.path.join(save_path, self.node.id)            
         try:
             fig_handle = fcn(pl.mfunc_name, save_path, vr_vals_in)
         except PlotRunner.matlab.engine.MatlabExecutionError as e:

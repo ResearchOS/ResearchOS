@@ -4,16 +4,10 @@ from copy import deepcopy
 import ResearchOS as ros
 
 classes_and_ids = [
-    (ros.Project, "PJ1"),
     (ros.Process, "PR1"),
-    (ros.Analysis, "AN1"),
     (ros.Subset, "SS1"),
     (ros.Logsheet, "LG1"),
     (ros.Dataset, "DS1"),
-    (ros.Phase, "PH1"),
-    (ros.Trial, "TR1"),
-    (ros.Visit, "VS1"),
-    (ros.Subject, "SJ1"),
     (ros.Variable, "VR1")    
 ]
 

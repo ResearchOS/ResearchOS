@@ -1,1 +1,1 @@
-INSERT INTO actions (action_id, name, datetime, redo_of) VALUES (?, ?, ?, ?)
+INSERT INTO actions (action_id, action_id_num, name, datetime, redo_of) VALUES (?, ?, ?, ?, ?)

@@ -51,6 +51,9 @@ class JSONConverter():
         for name, vr_dict in input_vr_ids_dict.items():
             # Two keys: "VR" and "slice".
             input_vrs_dict[name] = {}
+            if not isinstance(vr_dict, dict) or (isinstance(vr_dict, dict) and "VR" not in vr_dict.keys()):
+                input_vrs_dict[name] = vr_dict
+                continue
             if isinstance(vr_dict["VR"], dict):
                 cls_prefix = [key for key in vr_dict["VR"].keys()][0]
                 attr_name = [value for value in vr_dict["VR"].values()][0]
@@ -78,6 +81,9 @@ class JSONConverter():
         tmp_dict = {}
         for key, vr_dict in input_vrs.items():
             tmp_dict[key] = {}
+            if not isinstance(vr_dict, dict) or (isinstance(vr_dict, dict) and "VR" not in vr_dict.keys()):
+                tmp_dict[key] = vr_dict
+                continue
             if isinstance(vr_dict["VR"], dict):
                 tmp_dict[key]["VR"] = {key.prefix: value for key, value in vr_dict["VR"].items()} # DataObject level & attribute.
             else:

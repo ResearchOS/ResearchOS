@@ -1,1 +1,1 @@
-INSERT INTO vr_dataobjects (action_id, dataobject_id, vr_id, is_active) VALUES (?, ?, ?, 0)
+INSERT INTO vr_dataobjects (action_id_num, path_id, vr_id, is_active) VALUES (?, ?, ?, 0)

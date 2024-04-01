@@ -1,6 +1,7 @@
 {
     "db_file": "researchos.db",
     "data_db_file": "researchos_data.db",
+    "data_objects_path": "research_objects.data_objects.py",
     "use_file_system": true,
     "process_run_tmp_folder": "/Users/mitchelltillman/Desktop/Not_Work/Code/Python_Projects/test-researchos-example-project1",
     "process_run_file_name": "process_run.mat"

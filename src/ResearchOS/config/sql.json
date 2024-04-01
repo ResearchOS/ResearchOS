@@ -6,7 +6,7 @@
         "simple_attributes",
         "data_values",
         "data_addresses",
-        "data_address_schemas",
+        "paths",
         "vr_dataobjects",
         "pipelineobjects_graph"
     ],

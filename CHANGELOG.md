@@ -1,3 +1,6 @@
+v0.0.13
+Can run Process objects, and use batches. Uploading after docs edits so others can try it.
+
 v0.0.8
 Trying to make the pip install on another computer work :\
 

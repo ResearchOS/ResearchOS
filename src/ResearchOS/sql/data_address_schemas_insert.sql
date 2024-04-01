@@ -1,1 +1,0 @@
-INSERT INTO data_address_schemas (schema_id, levels_edge_list, dataset_id, action_id) VALUES (?, ?, ?, ?)

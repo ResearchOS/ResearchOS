@@ -17,7 +17,7 @@ def sql_joiner_most_recent(sqlquery: str) -> str:
                 FROM (
                     SELECT {columns_w_table_str}, ROW_NUMBER() OVER (PARTITION BY {where_columns_str} ORDER BY actions.datetime DESC) AS row_num
                     FROM {table}
-                    JOIN actions ON {table}.action_id = actions.action_id
+                    JOIN actions ON {table}.action_id_num = actions.action_id_num
                     WHERE {where_criteria_w_tables}
                     ORDER BY actions.datetime DESC
                 ) AS ranked
@@ -35,7 +35,7 @@ def sql_joiner(sqlquery: str) -> str:
 
     # Define the JOIN query
     table_cols = ", ".join([f"{table}.{col}" for col in columns])
-    join_query = f"SELECT {table_cols} FROM {table} JOIN actions ON {table}.action_id = actions.action_id WHERE {where_criteria} ORDER BY actions.datetime DESC"
+    join_query = f"SELECT {table_cols} FROM {table} JOIN actions ON {table}_num = actions.action_id_num WHERE {where_criteria} ORDER BY actions.datetime DESC"
 
     return join_query
 

@@ -9,7 +9,6 @@ all_default_attrs["hard_coded_value"] = None
 computer_specific_attr_names = []
 
 class Variable(ResearchObject):
-class Variable(ResearchObject):
     """Variable class."""
 
     prefix: str = "VR"

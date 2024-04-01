@@ -22,6 +22,11 @@ This page will guide you through the installation of Python, an Integrated Devel
 pip install researchos
 ```
 
+To download from Test PyPI:
+```
+python -m pip install --index-url https://test.pypi.org/simple/ --extra-index-url https://pypi.org/simple ResearchOS
+```
+
 You can now use ResearchOS in your Python code by importing it with:
 ```
 import researchos as ros

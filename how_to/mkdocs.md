@@ -5,6 +5,7 @@
 2. mkdocs-material
 3. mkdocstrings-python
 4. awesome-pages (https://github.com/lukasgeiter/mkdocs-awesome-pages-plugin)
+    - `pip install mkdocs-awesome-pages-plugin`
 
 # Required files:
 1. mkdocs.yml

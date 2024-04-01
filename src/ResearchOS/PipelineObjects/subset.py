@@ -108,6 +108,7 @@ class Subset(PipelineObject):
         
         Args:
             self
+            action (Action): the actions associated with the given subset
             
         Returns:
             A MultiDiGraph of the nodes in the subgraph IDK"""
@@ -174,7 +175,13 @@ class Subset(PipelineObject):
         return G.subgraph(nodes_for_subgraph) # Maintains the relationships between all of the nodes in the subgraph.
 
     def _extract_and_replace_lists(self, data, extracted_lists: list, counter=[0]):
-        """ Recursively traverses the data structure, replaces each list with a unique number, and extracts the lists. """
+        """ Recursively traverses the data structure, replaces each list with a unique number, and extracts the lists. 
+        
+        Args:
+            self
+            data
+            extracted_lists (list):
+            counter: """
         if isinstance(data, list):
             # Append the current list to the extracted lists
             extracted_lists.append(data)

@@ -144,7 +144,7 @@ class Logsheet(PipelineObject):
         
         Args:
             self
-            headers (list) : headers in the logsheet file as a list of tuples
+            headers (list): headers in the logsheet file as a list of tuples
             
         Returns:
             ''headers'' as a JSON string using ''json.dumps''"""
@@ -216,7 +216,7 @@ class Logsheet(PipelineObject):
         
         Args:
             self
-            class_column_names (dict) : dictionary where keys are logsheet column names & values are ''DataObject'' subcclasses
+            class_column_names (dict): dictionary where keys are logsheet column names & values are ''DataObject'' subcclasses
             action (Action): actions/commands associated with class column names
             default (Any): default class_column_names attribute stored in ''all_default_attributes''
 
@@ -484,7 +484,15 @@ class Logsheet(PipelineObject):
         action.execute() # Commit the action.
 
     def _clean_value(self, type_class: type, raw_value: Any) -> Any:
-        """Convert to proper type and clean the value of the logsheet cell."""
+        """Convert to proper type and clean the value of the logsheet cell.
+        
+        Args:
+            self
+            type_class (type): IDK
+            raw_value (Any): the raw value to be cleaned
+            
+        Returns:
+            newly cleaned value"""
         try:
             value = type_class(raw_value)
         except ValueError:

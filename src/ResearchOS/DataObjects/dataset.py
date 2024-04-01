@@ -122,7 +122,7 @@ class Dataset(DataObject):
         
         Args:
             self
-            action (Action) : actions associated with the given schema
+            action (Action): actions associated with the given schema
         
         Returns:
             the given schema as a list of types IDK might be a list of something else"""
@@ -171,10 +171,10 @@ class Dataset(DataObject):
         
         Args:
             self
-            action (Action) : 
+            action (Action): 
             
         Returns:
-            the dataset path (and associated Actions? IDK) as a string"""
+            the dataset path as a string"""
         return ResearchObjectHandler.get_user_computer_path(self, "dataset_path", action)
     
     ### File Schema Methods
@@ -185,7 +185,7 @@ class Dataset(DataObject):
         
         Args:
             self
-            file_schema (list) : list of strings
+            file_schema (list): list of strings
         
         Returns:
             None
@@ -310,7 +310,7 @@ class Dataset(DataObject):
         """Convert the addresses edge list to a MultiDiGraph.
         Args:
             self
-            addresses (list) : list of addresses
+            addresses (list): list of addresses
         Returns:
             nx.MultiDiGraph of addresses"""
         # action = Action("get_addresses_graph")

@@ -1,4 +1,6 @@
 # First Project
+
+### NOTE: Add a step for creating the paths.py file. Provide a note about double slashes in Windows paths.
 ## Introduction
 To familiarize you with the basics of how ResearchOS works, let's create a simple one step pipeline that reads a single number from a [Logsheet](../Research%20Objects/Pipeline%20Objects/logsheet.md), squares it, and stores that value. 
 
